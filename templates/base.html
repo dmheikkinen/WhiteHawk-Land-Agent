@@ -1,62 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}Ohio Landman Pipeline{% endblock %}</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}Ohio Landman{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* Terminal / log window */
-    .log-terminal {
-      font-family: "Consolas", "Menlo", "Courier New", monospace;
-      font-size: 0.78rem;
-      line-height: 1.5;
-    }
-    /* Pulse dot for running state */
-    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
-    .pulse { animation: pulse-dot 1.2s ease-in-out infinite; }
+    .log-terminal { font-family: "Consolas","Menlo","Courier New",monospace; font-size:0.76rem; line-height:1.55; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 0.9s linear infinite; display:inline-block; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+    .blink { animation: blink 1.4s ease-in-out infinite; }
   </style>
 </head>
-<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col">
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-  <!-- Top navigation -->
-  <nav class="bg-indigo-800 text-white shadow-md">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-      <a href="/" class="flex items-center gap-2 font-bold text-lg tracking-tight">
-        <span class="text-2xl">🔍</span> Ohio Landman Pipeline
+  <!-- Nav -->
+  <header class="bg-indigo-900 text-white shadow-lg">
+    <div class="max-w-5xl mx-auto px-5 py-3 flex items-center justify-between">
+      <a href="/setup" class="font-bold text-lg tracking-tight flex items-center gap-2">
+        <span class="text-xl">⛏</span> Ohio Landman Pipeline
       </a>
-      <div class="flex items-center gap-6 text-sm font-medium">
-        <a href="/"        class="hover:text-indigo-200 transition-colors {% if request.endpoint == 'index' %}text-white underline underline-offset-4{% else %}text-indigo-200{% endif %}">Dashboard</a>
-        <a href="/settings" class="hover:text-indigo-200 transition-colors {% if request.endpoint == 'settings' %}text-white underline underline-offset-4{% else %}text-indigo-200{% endif %}">Settings</a>
-        <a href="/logs"     class="hover:text-indigo-200 transition-colors {% if request.endpoint in ('logs_list','logs_view') %}text-white underline underline-offset-4{% else %}text-indigo-200{% endif %}">Logs</a>
-        <a href="/files"    class="hover:text-indigo-200 transition-colors {% if request.endpoint == 'files_view' %}text-white underline underline-offset-4{% else %}text-indigo-200{% endif %}">Files</a>
-      </div>
-    </div>
-  </nav>
-
-  <!-- Flash messages -->
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      <div class="max-w-6xl mx-auto w-full px-4 pt-4">
-        {% for category, message in messages %}
-          <div class="rounded-lg px-4 py-3 mb-2 text-sm font-medium
-            {% if category == 'success' %}bg-green-100 text-green-800 border border-green-300
-            {% elif category == 'error' %}bg-red-100 text-red-800 border border-red-300
-            {% else %}bg-blue-100 text-blue-800 border border-blue-300{% endif %}">
-            {{ message }}
-          </div>
+      <nav class="flex items-center gap-1 text-sm font-medium">
+        {% set pages = [('/setup','Setup','setup'), ('/run','Run','run'), ('/downloads','Downloads','downloads')] %}
+        {% for href, label, key in pages %}
+          <a href="{{ href }}"
+            class="px-4 py-1.5 rounded-full transition-colors
+              {% if active_page == key %}bg-white/20 text-white
+              {% else %}text-indigo-200 hover:text-white hover:bg-white/10{% endif %}">
+            {{ label }}
+          </a>
         {% endfor %}
-      </div>
-    {% endif %}
-  {% endwith %}
+      </nav>
+    </div>
+  </header>
 
-  <!-- Page content -->
-  <main class="flex-1 max-w-6xl mx-auto w-full px-4 py-8">
+  <main class="flex-1 max-w-5xl mx-auto w-full px-5 py-8">
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="text-center text-xs text-gray-400 py-4">
-    Ohio Landman Pipeline · local dev only · API keys stored server-side
+  <footer class="text-center text-xs text-slate-400 py-4 border-t border-slate-200">
+    API keys are read from OS environment variables and never stored by this app.
   </footer>
 </body>
 </html>

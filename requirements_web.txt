@@ -1,5 +1,12 @@
-# Ohio Landman Web UI — additional dependencies
-# The pipeline scripts already require: openai, requests
-# This file adds only what the web layer needs.
+# Ohio Landman Web UI — dependencies
+# Pipeline scripts already require: openai, requests
+# This file adds what the web layer needs.
 
-flask>=3.0
+# FastAPI + ASGI server + form support + templates (all in one):
+fastapi[all]>=0.111
+
+# If you prefer minimal install, use these individually:
+#   fastapi>=0.111
+#   uvicorn[standard]>=0.29
+#   python-multipart>=0.0.9
+#   jinja2>=3.1

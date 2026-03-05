@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% set active_page = "run" %}
+{% block title %}Run — Ohio Landman{% endblock %}
+
+{% block content %}
+
+<!-- Workflow banner -->
+<div class="mb-6 bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-3 flex items-center gap-3 text-sm">
+  <span class="text-indigo-500 font-bold text-base">→</span>
+  <span class="text-indigo-700">
+    <strong>Default workflow:</strong>
+    <span class="font-semibold">1. Harvest</span> →
+    <span class="font-semibold">2. Score</span> →
+    <a href="/downloads" class="underline">Download</a>.
+    &nbsp; Phase 3 (Orchestrate) is <em>optional</em> — use it for deeper AI enrichment.
+  </span>
+</div>
+
+<!-- ═══════════════════════════════════════
+     MACRO: phase card
+═══════════════════════════════════════ -->
+{% macro phase_card(phase_key, title, phase_num, icon, description, outputs, job, ready, disable_reason, scored_files=[]) %}
+{% set is_running = job and job.status == 'running' %}
+{% set is_done    = job and job.status == 'done' %}
+{% set is_error   = job and job.status == 'error' %}
+{% set has_job    = job is not none %}
+
+<section id="section-{{ phase_key }}" class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-5">
+
+  <!-- Card header -->
+  <div class="px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-4">
+    <div class="flex items-start gap-3">
+      <span class="text-2xl mt-0.5">{{ icon }}</span>
+      <div>
+        <div class="text-xs font-semibold text-indigo-500 uppercase tracking-wide">Phase {{ phase_num }}{% if phase_num == '3' %} — Optional{% endif %}</div>
+        <h2 class="text-lg font-bold text-slate-800 leading-tight">{{ title }}</h2>
+        <p class="text-sm text-slate-500 mt-1 max-w-xl">{{ description }}</p>
+        <p class="text-xs text-slate-400 mt-1">
+          <span class="font-medium text-slate-500">Produces:</span> {{ outputs }}
+        </p>
+      </div>
+    </div>
+
+    <!-- Status badge -->
+    <div class="flex-shrink-0 mt-1">
+      {% if is_running %}
+        <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-blue-100 text-blue-700">
+          <span class="spinner text-blue-500">⟳</span> Running
+        </span>
+      {% elif is_done %}
+        <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-green-100 text-green-700">
+          ✓ Done
+        </span>
+      {% elif is_error %}
+        <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-red-100 text-red-700">
+          ✗ Error
+        </span>
+      {% else %}
+        <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-100 text-slate-500">
+          Idle
+        </span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Run controls -->
+  <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center gap-4 flex-wrap">
+
+    <!-- File chips -->
+    <div class="flex flex-wrap gap-2 flex-1">
+      {{ caller() }}
+    </div>
+
+    <!-- Run button area -->
+    <div class="flex items-center gap-3 flex-shrink-0">
+      {% if is_running %}
+        <span class="text-xs text-blue-600 font-medium blink">● Running — see logs below</span>
+      {% else %}
+        {% if phase_key == 'orchestrator' and scored_files %}
+          <form method="post" action="/run/{{ phase_key }}" class="flex items-center gap-2">
+            <select name="candidates_file"
+              class="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white text-slate-600 max-w-48 truncate">
+              <option value="">— No candidates file —</option>
+              {% for f in scored_files %}
+                <option value="{{ f }}">{{ f }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" {% if not ready %}disabled title="{{ disable_reason }}"{% endif %}
+              class="px-5 py-2 rounded-xl text-sm font-semibold transition-colors shadow-sm
+                {% if ready %}bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer
+                {% else %}bg-slate-200 text-slate-400 cursor-not-allowed{% endif %}">
+              ▶ Run {{ title }}
+            </button>
+          </form>
+        {% else %}
+          <form method="post" action="/run/{{ phase_key }}">
+            <button type="submit" {% if not ready %}disabled title="{{ disable_reason }}"{% endif %}
+              class="px-5 py-2 rounded-xl text-sm font-semibold transition-colors shadow-sm
+                {% if ready %}bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer
+                {% else %}bg-slate-200 text-slate-400 cursor-not-allowed{% endif %}">
+              ▶ Run {{ title }}
+            </button>
+          </form>
+        {% endif %}
+        {% if not ready %}
+          <span class="text-xs text-amber-600">⚠ {{ disable_reason }}</span>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Log terminal (shown if any job exists for this phase) -->
+  {% if has_job %}
+  <div class="px-0">
+    <div class="flex items-center justify-between px-4 py-1.5 bg-slate-800 text-slate-400 text-xs">
+      <span>{{ job.label }} · #{{ job.id }} · {{ job.started_at }}</span>
+      <label class="flex items-center gap-1.5 cursor-pointer select-none">
+        <input type="checkbox" id="autoscroll-{{ phase_key }}" checked class="rounded accent-indigo-400"/>
+        auto-scroll
+      </label>
+    </div>
+    <div id="terminal-{{ phase_key }}" class="log-terminal bg-slate-950 text-slate-100 px-4 py-3 overflow-y-auto"
+         style="height:260px">
+      {% for line in job.logs %}
+        <div class="
+          {% if '[ERROR]' in line or 'Error:' in line or 'FAILED' in line %}text-red-400
+          {% elif '[WARN]' in line %}text-yellow-400
+          {% elif 'Done' in line or 'Written' in line or 'Total' in line or 'Success' in line %}text-emerald-400
+          {% elif '===' in line or '---' in line %}text-indigo-300 font-medium
+          {% else %}text-slate-300{% endif %}">{{ line }}</div>
+      {% endfor %}
+      <div id="log-end-{{ phase_key }}"></div>
+    </div>
+    {% if job.finished_at %}
+      <div class="px-4 py-1.5 text-xs text-slate-400 bg-slate-900 border-t border-slate-800">
+        Finished: {{ job.finished_at }} · Exit code: {{ job.return_code }}
+      </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</section>
+{% endmacro %}
+
+
+<!-- ═══════════════════════════════════════
+     Phase 1 — Harvest
+═══════════════════════════════════════ -->
+{% call(nothing) phase_card(
+    "harvest", "Harvest", "1", "🌐",
+    "Runs 80+ targeted web searches via SerpAPI and 10 SEC EDGAR filings queries across all Ohio mineral/royalty contact categories.",
+    "raw_hits.jsonl  (every search result)  ·  candidates.csv  (deduplicated, ready for scoring)",
+    phase_jobs.harvest, harvest_ok,
+    "Set SERPAPI_API_KEY first — see Setup page"
+) %}
+  {# file chips #}
+  {% if ps.raw_hits_exists %}
+    <span class="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2.5 py-0.5 font-medium">
+      ✓ raw_hits.jsonl ({{ ps.raw_hits_lines }} lines)
+    </span>
+  {% else %}
+    <span class="text-xs bg-slate-100 text-slate-400 rounded-full px-2.5 py-0.5">raw_hits.jsonl — not yet</span>
+  {% endif %}
+  {% if ps.candidates_exists %}
+    <span class="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2.5 py-0.5 font-medium">
+      ✓ candidates.csv ({{ ps.candidates_rows }} rows)
+    </span>
+  {% else %}
+    <span class="text-xs bg-slate-100 text-slate-400 rounded-full px-2.5 py-0.5">candidates.csv — not yet</span>
+  {% endif %}
+{% endcall %}
+
+
+<!-- ═══════════════════════════════════════
+     Phase 2 — Score
+═══════════════════════════════════════ -->
+{% call(nothing) phase_card(
+    "score", "Score", "2", "🤖",
+    "Sends candidates.csv to an AI model in batches, classifying each contact by segment (Broker/Fund/Attorney/etc.) and assigning A/B/C tier rankings.",
+    "ohio_landman_contacts_<timestamp>.csv  (tiered, scored, filtered contact list)",
+    phase_jobs.score, score_ok,
+    "Set OPENAI_API_KEY and run Harvest first"
+) %}
+  {# file chips #}
+  {% if ps.candidates_exists %}
+    <span class="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2.5 py-0.5 font-medium">
+      ✓ candidates.csv ready ({{ ps.candidates_rows }} rows)
+    </span>
+  {% else %}
+    <span class="text-xs bg-amber-100 text-amber-700 rounded-full px-2.5 py-0.5">⚠ candidates.csv missing — run Harvest first</span>
+  {% endif %}
+  {% if ps.scored_files %}
+    <span class="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2.5 py-0.5 font-medium">
+      ✓ {{ ps.scored_files|length }} scored file(s)
+    </span>
+  {% endif %}
+{% endcall %}
+
+
+<!-- ═══════════════════════════════════════
+     Phase 3 — Orchestrate (optional)
+═══════════════════════════════════════ -->
+{% call(nothing) phase_card(
+    "orchestrator", "Orchestrate", "3", "🧠",
+    "The GPT-4.1 Landman assistant does deep research, optionally using your scored contacts as a starting point for richer enrichment.",
+    "ohio_contacts_<timestamp>.csv  (deeply enriched, assistant-verified contact list)",
+    phase_jobs.orchestrator, orchestrator_ok,
+    "Set OPENAI_API_KEY first — see Setup page",
+    scored_files=ps.all_scored_names
+) %}
+  {# file chips #}
+  {% if ps.contact_files %}
+    <span class="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2.5 py-0.5 font-medium">
+      ✓ {{ ps.contact_files|length }} orchestrated file(s)
+    </span>
+  {% else %}
+    <span class="text-xs bg-slate-100 text-slate-400 rounded-full px-2.5 py-0.5">No output yet</span>
+  {% endif %}
+  <a href="/downloads" class="text-xs text-indigo-600 hover:underline ml-auto">View all files →</a>
+{% endcall %}
+
+
+<!-- ═══════════════════════════════════════
+     JavaScript — SSE connection + UX
+═══════════════════════════════════════ -->
+<script>
+const PHASE_JOBS = {
+  {% for phase, job in phase_jobs.items() %}
+  "{{ phase }}": {{ {'id': job.id, 'status': job.status, 'log_count': job.logs|length} | tojson if job else 'null' }},
+  {% endfor %}
+};
+
+function colorLine(text) {
+  if (/\[ERROR\]|Error:|FAILED/.test(text)) return 'text-red-400';
+  if (/\[WARN\]/.test(text))               return 'text-yellow-400';
+  if (/Done|Written|Total|Success/.test(text)) return 'text-emerald-400';
+  if (/===|---/.test(text))                return 'text-indigo-300 font-medium';
+  return 'text-slate-300';
+}
+
+function connectSSE(phase, jobId, alreadySent) {
+  const terminal = document.getElementById('terminal-' + phase);
+  const logEnd   = document.getElementById('log-end-' + phase);
+  const autoChk  = document.getElementById('autoscroll-' + phase);
+  if (!terminal || !logEnd) return;
+
+  let seen = 0;
+  const src = new EventSource('/jobs/' + jobId + '/stream');
+
+  src.onmessage = (e) => {
+    seen++;
+    if (seen <= alreadySent) return;   // skip lines already rendered server-side
+    const div = document.createElement('div');
+    div.className = colorLine(e.data);
+    div.textContent = e.data;
+    terminal.insertBefore(div, logEnd);
+    if (autoChk?.checked) terminal.scrollTop = terminal.scrollHeight;
+  };
+
+  src.addEventListener('done', (e) => {
+    src.close();
+    // Reload page so status badge and file chips update
+    setTimeout(() => location.reload(), 800);
+  });
+
+  src.onerror = () => src.close();
+
+  // Initial scroll
+  terminal.scrollTop = terminal.scrollHeight;
+}
+
+// Connect SSE for any currently-running phase
+Object.entries(PHASE_JOBS).forEach(([phase, info]) => {
+  if (info && info.status === 'running') {
+    connectSSE(phase, info.id, info.log_count);
+  }
+});
+
+// Scroll to the newly-started phase on redirect
+const urlJob = new URLSearchParams(location.search).get('job');
+if (urlJob) {
+  Object.entries(PHASE_JOBS).forEach(([phase, info]) => {
+    if (info && info.id === urlJob) {
+      const el = document.getElementById('section-' + phase);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+}
+</script>
+
+{% endblock %}

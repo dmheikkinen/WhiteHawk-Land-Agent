@@ -4,7 +4,7 @@
     {
       "name": "Ohio Landman Web UI",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["app.py"],
+      "runtimeArgs": ["-m", "uvicorn", "server:app", "--port", "5000", "--reload"],
       "port": 5000
     }
   ]
