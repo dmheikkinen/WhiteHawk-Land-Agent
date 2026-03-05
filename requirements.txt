@@ -1,0 +1,17 @@
+# Ohio Landman Pipeline — Python dependencies
+# Python 3.11 or 3.12 required.
+#
+# Install:
+#   pip install -r requirements.txt
+
+# ── OpenAI SDK (Phase 2 Score + Phase 3 Orchestrate) ──────────────────────────
+openai>=1.30
+
+# ── HTTP client (Phase 1 Harvest via SerpAPI + EDGAR) ─────────────────────────
+requests>=2.31
+
+# ── Web UI (FastAPI + Uvicorn + Jinja2 + file-upload support) ─────────────────
+# fastapi[all] bundles: fastapi, uvicorn[standard], python-multipart, jinja2,
+# httpx, orjson, and a few other extras.  Pin the lower bound; let pip resolve
+# the rest so it stays compatible with your existing packages.
+fastapi[all]>=0.111

@@ -1,0 +1,32 @@
+# Ohio Landman Pipeline — Docker Compose
+#
+# Usage:
+#   docker compose up -d          # start (detached)
+#   docker compose logs -f        # follow logs
+#   docker compose down           # stop
+#   docker compose up -d --build  # rebuild after code changes
+#
+# Secrets are read from .env at runtime — never baked into the image.
+# Create .env from .env.example before running:
+#   cp .env.example .env && nano .env
+
+services:
+  ohio-landman:
+    build: .
+    image: ohio-landman:latest
+    restart: unless-stopped
+    ports:
+      # Bind to localhost only — put nginx in front for TLS + public access.
+      - "127.0.0.1:5000:5000"
+    env_file:
+      # API keys live here on disk, never in the image layer.
+      - .env
+    volumes:
+      # Pipeline output files persist across container restarts.
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5000/setup"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
