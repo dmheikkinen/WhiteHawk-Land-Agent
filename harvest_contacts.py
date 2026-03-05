@@ -17,11 +17,15 @@ Env vars required:
   SERPAPI_API_KEY   - your SerpAPI key
 
 Env vars optional:
-  RAW_HITS_FILE     - override raw_hits.jsonl path
-  CANDIDATES_FILE   - override candidates.csv path
-  SERPAPI_DELAY     - seconds between SerpAPI calls (default 1.5)
-  EDGAR_DELAY       - seconds between EDGAR calls (default 0.6)
-  WEB_RESULTS_PER_QUERY - results per SerpAPI call (default 10)
+  RAW_HITS_FILE          - override raw_hits.jsonl path
+  CANDIDATES_FILE        - override candidates.csv path
+  SERPAPI_DELAY          - seconds between SerpAPI calls (default 1.5)
+  EDGAR_DELAY            - seconds between EDGAR calls (default 0.6)
+  WEB_RESULTS_PER_QUERY  - results per SerpAPI call (default 10)
+  CONSERVATIVE_MODE=1    - halve results/query and truncate snippets to 150 chars
+                           (reduces SerpAPI quota use and speeds up runs)
+  DRY_RUN=1              - validate config and print all planned queries,
+                           then exit without making any API calls
 """
 
 import csv
@@ -45,6 +49,21 @@ CANDIDATES_FILE = os.environ.get("CANDIDATES_FILE", "candidates.csv")
 SERPAPI_DELAY = float(os.environ.get("SERPAPI_DELAY", "1.5"))
 EDGAR_DELAY = float(os.environ.get("EDGAR_DELAY", "0.6"))
 WEB_RESULTS_PER_QUERY = int(os.environ.get("WEB_RESULTS_PER_QUERY", "10"))
+
+# ── Operational safeguards ──────────────────────────────────────────────────
+_flag = lambda k: os.environ.get(k, "").strip().lower() in ("1", "true", "yes")
+
+CONSERVATIVE_MODE = _flag("CONSERVATIVE_MODE")
+DRY_RUN           = _flag("DRY_RUN")
+
+if CONSERVATIVE_MODE:
+    # Halve results per query and add extra inter-call breathing room.
+    WEB_RESULTS_PER_QUERY = min(WEB_RESULTS_PER_QUERY, 5)
+    SERPAPI_DELAY = max(SERPAPI_DELAY, 2.5)
+    print("[CONSERVATIVE] Mode ON: 5 results/query, delay ≥ 2.5 s, snippets capped at 150 chars")
+
+# Maximum snippet length stored per hit (keeps token budgets predictable).
+MAX_SNIPPET_CHARS = 150 if CONSERVATIVE_MODE else 500
 
 EDGAR_SEARCH_URL = "https://efts.sec.gov/LATEST/search-index"
 EDGAR_FILING_BASE = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company={entity}&CIK=&type=&dateb=&owner=include&count=10&search_text=&action=getcompany"
@@ -242,13 +261,14 @@ def harvest_web(raw_hits_file: str, done_queries: set[str]) -> int:
                 url = r.get("url", "")
                 if not url:
                     continue
+                snippet = (r.get("snippet", "") or "")[:MAX_SNIPPET_CHARS]
                 hit = {
                     "source": "web_search",
                     "query_family": family,
                     "query": query,
                     "title": r.get("title", ""),
                     "url": url,
-                    "snippet": r.get("snippet", ""),
+                    "snippet": snippet,
                     "position": r.get("position"),
                     "entity_name": None,
                     "file_date": None,
@@ -541,10 +561,27 @@ def write_candidates_csv(candidates: list[dict], candidates_file: str) -> None:
 def main() -> None:
     print("=" * 60)
     print("Ohio Landman — Harvest Contacts  (Phase 1)")
+    if CONSERVATIVE_MODE: print("Mode: CONSERVATIVE")
+    if DRY_RUN:           print("Mode: DRY RUN  (no API calls will be made)")
     print("=" * 60)
 
     if not SERPAPI_KEY:
         print("[WARN] SERPAPI_API_KEY not set — web search will be skipped.")
+
+    # ── Dry run: print all planned queries and exit ──────────────────────────
+    if DRY_RUN:
+        total_web = sum(len(q) for q in WEB_QUERIES.values())
+        print(f"\nDRY RUN — would execute {total_web} web queries + {len(EDGAR_QUERIES)} EDGAR queries\n")
+        for family, queries in WEB_QUERIES.items():
+            print(f"  [{family}]  ({len(queries)} queries, {WEB_RESULTS_PER_QUERY} results each)")
+            for q in queries:
+                print(f"    • {q}")
+        print(f"\n  [edgar]  ({len(EDGAR_QUERIES)} queries)")
+        for q in EDGAR_QUERIES:
+            print(f"    • {q}")
+        print(f"\nOutputs would be written to:\n  {RAW_HITS_FILE}\n  {CANDIDATES_FILE}")
+        print("\nDRY RUN complete — no API calls made.")
+        return
 
     # Load which queries are already done (resume support)
     done_queries = load_done_queries(RAW_HITS_FILE)

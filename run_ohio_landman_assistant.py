@@ -28,6 +28,7 @@ import argparse
 import csv
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -293,12 +294,25 @@ def handle_tool_calls(run, thread_id: str):
             }
         )
 
-    updated_run = client.beta.threads.runs.submit_tool_outputs(
-        thread_id=thread_id,
-        run_id=run.id,
-        tool_outputs=tool_outputs,
-    )
-    return updated_run
+    # Retry submit_tool_outputs with full-jitter exponential backoff
+    MAX_SUBMIT_ATTEMPTS = 4
+    for attempt in range(MAX_SUBMIT_ATTEMPTS):
+        try:
+            updated_run = client.beta.threads.runs.submit_tool_outputs(
+                thread_id=thread_id,
+                run_id=run.id,
+                tool_outputs=tool_outputs,
+            )
+            return updated_run
+        except Exception as exc:
+            if attempt < MAX_SUBMIT_ATTEMPTS - 1:
+                cap = min(2 ** attempt * 3, 30)          # 3 s, 6 s, 12 s …
+                sleep_for = random.uniform(0, cap)
+                print(f"  [RETRY submit {attempt+1}/{MAX_SUBMIT_ATTEMPTS-1}] {exc} — sleeping {sleep_for:.1f}s")
+                time.sleep(sleep_for)
+            else:
+                print(f"  [ERROR] submit_tool_outputs failed after {MAX_SUBMIT_ATTEMPTS} attempts: {exc}")
+                raise
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +371,11 @@ def parse_args() -> argparse.Namespace:
         default=OUTPUT_FILE,
         help="Output CSV filename",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate config and print plan; exit without making any API calls",
+    )
     return parser.parse_args()
 
 
@@ -375,6 +394,17 @@ def main() -> None:
     else:
         print("SerpAPI: DISABLED (set SERPAPI_API_KEY to enable real searches)")
     print("=" * 60)
+
+    # Dry run: validate config and print plan, then exit without API calls
+    if args.dry_run:
+        print("\n[DRY RUN] Configuration validated. No API calls will be made.")
+        print(f"  Assistant ID   : {ASSISTANT_ID}")
+        print(f"  Target contacts: {target}")
+        print(f"  Candidates file: {args.candidates or '(none — assistant searches from scratch)'}")
+        print(f"  Output file    : {output_file}")
+        print(f"  SerpAPI        : {'enabled' if SERPAPI_KEY else 'DISABLED'}")
+        print("\n[DRY RUN] Remove --dry-run to run for real.")
+        return
 
     # Optionally load pre-harvested candidates for context injection
     candidates_context = ""

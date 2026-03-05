@@ -4,6 +4,41 @@
 
 {% block content %}
 
+<!-- ═══════════════════════════════════════
+     Mode Controls (Conservative / Dry Run)
+═══════════════════════════════════════ -->
+<div class="mb-5 bg-white border border-slate-200 rounded-2xl px-6 py-4 shadow-sm">
+  <div class="flex flex-wrap gap-6 items-center">
+    <span class="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+      <span class="text-base">⚙️</span> Run Mode
+    </span>
+
+    <label class="flex items-center gap-2 cursor-pointer select-none group">
+      <input type="checkbox" id="mode-conservative"
+             class="w-4 h-4 rounded accent-indigo-600 cursor-pointer"/>
+      <span class="text-sm font-medium text-slate-700 group-hover:text-indigo-700 transition-colors">Conservative</span>
+      <span class="text-xs text-slate-400">— halves search pages, longer delays, shorter snippets</span>
+    </label>
+
+    <label class="flex items-center gap-2 cursor-pointer select-none group">
+      <input type="checkbox" id="mode-dry-run"
+             class="w-4 h-4 rounded accent-amber-500 cursor-pointer"/>
+      <span class="text-sm font-medium text-slate-700 group-hover:text-amber-600 transition-colors">Dry Run</span>
+      <span class="text-xs text-slate-400">— validates config and prints plan, no API calls made</span>
+    </label>
+  </div>
+
+  <!-- Active-mode badges (shown when a box is checked) -->
+  <div id="mode-badges" class="mt-3 hidden flex gap-2">
+    <span id="badge-conservative" class="hidden text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700">
+      🔵 Conservative Mode ON
+    </span>
+    <span id="badge-dry-run" class="hidden text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+      🟡 Dry Run ON — no API calls
+    </span>
+  </div>
+</div>
+
 <!-- Workflow banner -->
 <div class="mb-6 bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-3 flex items-center gap-3 text-sm">
   <span class="text-indigo-500 font-bold text-base">→</span>
@@ -286,6 +321,38 @@ if (urlJob) {
     }
   });
 }
+
+// ── Mode-controls: inject hidden inputs + update badges ─────────────────────
+function updateModeBadges() {
+  const cons   = document.getElementById('mode-conservative')?.checked;
+  const dryRun = document.getElementById('mode-dry-run')?.checked;
+  const badges = document.getElementById('mode-badges');
+  document.getElementById('badge-conservative').classList.toggle('hidden', !cons);
+  document.getElementById('badge-dry-run').classList.toggle('hidden', !dryRun);
+  badges.classList.toggle('hidden', !cons && !dryRun);
+  badges.classList.toggle('flex', cons || dryRun);
+}
+
+document.getElementById('mode-conservative')?.addEventListener('change', updateModeBadges);
+document.getElementById('mode-dry-run')?.addEventListener('change', updateModeBadges);
+
+// Inject hidden inputs into every /run/* form at submit time
+document.querySelectorAll('form[action^="/run/"]').forEach(form => {
+  form.addEventListener('submit', () => {
+    const cons   = document.getElementById('mode-conservative')?.checked;
+    const dryRun = document.getElementById('mode-dry-run')?.checked;
+    if (cons) {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'conservative'; inp.value = '1';
+      form.appendChild(inp);
+    }
+    if (dryRun) {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'dry_run'; inp.value = '1';
+      form.appendChild(inp);
+    }
+  });
+});
 </script>
 
 {% endblock %}

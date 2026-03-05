@@ -17,15 +17,18 @@ Env vars required:
   OPENAI_API_KEY
 
 Env vars optional:
-  SCORE_MODEL       - OpenAI model (default: gpt-4o-mini)
-  BATCH_SIZE        - candidates per OpenAI call (default: 20)
-  OUTPUT_FILE       - override output filename
-  MIN_SCORE         - drop contacts below this relevance score (default: 4.0)
+  SCORE_MODEL          - OpenAI model (default: gpt-4o-mini)
+  BATCH_SIZE           - candidates per OpenAI call (default: 15, hard-capped at 20)
+  OUTPUT_FILE          - override output filename
+  MIN_SCORE            - drop contacts below this relevance score (default: 4.0)
+  MAX_SNIPPET_CHARS    - truncate evidence snippets before sending (default: 300)
+  DRY_RUN=1            - validate config, print batch plan, exit without API calls
 """
 
 import csv
 import json
 import os
+import random
 import sys
 import time
 from datetime import datetime, timezone
@@ -36,8 +39,20 @@ from openai import OpenAI
 # Configuration
 # ---------------------------------------------------------------------------
 SCORE_MODEL = os.environ.get("SCORE_MODEL", "gpt-4o-mini")
-BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "20"))
+
+# Hard cap: >20 candidates in one prompt reliably causes token-overflow or
+# truncated JSON on most models.  User-supplied BATCH_SIZE is honoured up to
+# that ceiling so callers never have to think about it.
+_HARD_CAP_BATCH = 20
+BATCH_SIZE = min(int(os.environ.get("BATCH_SIZE", "15")), _HARD_CAP_BATCH)
+
 MIN_SCORE = float(os.environ.get("MIN_SCORE", "4.0"))
+
+# Snippet length cap — long snippets balloon the prompt without adding signal.
+MAX_SNIPPET_CHARS = int(os.environ.get("MAX_SNIPPET_CHARS", "300"))
+
+_flag = lambda k: os.environ.get(k, "").strip().lower() in ("1", "true", "yes")
+DRY_RUN = _flag("DRY_RUN")
 OUTPUT_FILE = os.environ.get(
     "OUTPUT_FILE",
     f"ohio_landman_contacts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
@@ -171,12 +186,14 @@ def load_candidates(candidates_file: str) -> list[dict]:
 
 def candidate_to_context(c: dict) -> dict:
     """Convert a CSV row into a compact dict for the scoring prompt."""
-    # Truncate long snippets to keep token counts manageable
     snippets_raw = c.get("evidence_snippets", "")
-    snippets = [s.strip() for s in snippets_raw.split("|") if s.strip()][:3]
+    snippets = [
+        s.strip()[:MAX_SNIPPET_CHARS]          # enforce per-snippet cap
+        for s in snippets_raw.split("|") if s.strip()
+    ][:3]                                       # max 3 snippets per candidate
 
     urls_raw = c.get("source_urls", "")
-    urls = [u.strip() for u in urls_raw.split("|") if u.strip()][:5]
+    urls = [u.strip() for u in urls_raw.split("|") if u.strip()][:3]  # 3 URLs enough
 
     return {
         "candidate_id": c.get("candidate_id", ""),
@@ -209,7 +226,9 @@ def score_batch(batch: list[dict], batch_num: int, total_batches: int) -> list[d
         candidates_json=candidates_json,
     )
 
-    for attempt in range(3):
+    # Exponential backoff with full jitter — handles TPM / RPM rate limits.
+    MAX_ATTEMPTS = 5
+    for attempt in range(MAX_ATTEMPTS):
         try:
             response = client.chat.completions.create(
                 model=SCORE_MODEL,
@@ -223,10 +242,14 @@ def score_batch(batch: list[dict], batch_num: int, total_batches: int) -> list[d
             raw = response.choices[0].message.content.strip()
             break
         except Exception as exc:
-            print(f"  [ERROR] OpenAI attempt {attempt + 1}: {exc}")
-            if attempt < 2:
-                time.sleep(2 ** attempt * 3)
+            if attempt < MAX_ATTEMPTS - 1:
+                # Full jitter: sleep = random(0, cap) where cap doubles each retry
+                cap = min(2 ** attempt * 4, 60)          # 4 s, 8 s, 16 s, 32 s …
+                sleep_for = random.uniform(0, cap)
+                print(f"  [RETRY {attempt+1}/{MAX_ATTEMPTS-1}] {exc} — sleeping {sleep_for:.1f}s")
+                time.sleep(sleep_for)
             else:
+                print(f"  [ERROR] All {MAX_ATTEMPTS} attempts exhausted: {exc}")
                 return []
 
     # Strip optional markdown code fences
@@ -334,6 +357,18 @@ def main() -> None:
     # Batch and score
     all_contacts: list[dict] = []
     total_batches = (len(context_list) + BATCH_SIZE - 1) // BATCH_SIZE
+
+    # Dry run: validate config and print batch plan, then exit without API calls
+    if DRY_RUN:
+        print("\n[DRY RUN] Configuration validated. No API calls will be made.")
+        print(f"  Candidates file : {CANDIDATES_FILE}")
+        print(f"  Candidates loaded: {len(context_list)} rows")
+        print(f"  Batch size      : {BATCH_SIZE}  (hard cap: {_HARD_CAP_BATCH})")
+        print(f"  Total batches   : {total_batches}")
+        print(f"  Model           : {SCORE_MODEL}  |  Min score: {MIN_SCORE}")
+        print(f"  Output file     : {OUTPUT_FILE}")
+        print("\n[DRY RUN] Set DRY_RUN=0 (or unset) to run for real.")
+        return
 
     for i in range(0, len(context_list), BATCH_SIZE):
         batch = context_list[i : i + BATCH_SIZE]

@@ -293,34 +293,44 @@ async def run_page(request: Request):
 
 
 @app.post("/run/harvest")
-async def run_harvest():
+async def run_harvest(conservative: str = Form(""), dry_run: str = Form("")):
     DATA_DIR.mkdir(exist_ok=True)
-    env = _base_env({
+    extra: dict = {
         "RAW_HITS_FILE":   str(DATA_DIR / "raw_hits.jsonl"),
         "CANDIDATES_FILE": str(DATA_DIR / "candidates.csv"),
-    })
+    }
+    if conservative:
+        extra["CONSERVATIVE_MODE"] = "1"
+    if dry_run:
+        extra["DRY_RUN"] = "1"
+    env = _base_env(extra)
     jid = start_job("harvest", "Phase 1 — Harvest", [sys.executable, "-u", str(SCRIPTS["harvest"])], env)
     return RedirectResponse(f"/run?job={jid}", status_code=303)
 
 
 @app.post("/run/score")
-async def run_score():
+async def run_score(conservative: str = Form(""), dry_run: str = Form("")):
     cfg = load_config()
     ts  = datetime.now().strftime("%Y%m%d_%H%M%S")
     DATA_DIR.mkdir(exist_ok=True)
-    env = _base_env({
+    extra: dict = {
         "SCORE_MODEL":  cfg["score_model"],
         "BATCH_SIZE":   cfg["batch_size"],
         "MIN_SCORE":    cfg["min_score"],
         "OUTPUT_FILE":  str(DATA_DIR / f"ohio_landman_contacts_{ts}.csv"),
-    })
+    }
+    if conservative:
+        extra["CONSERVATIVE_MODE"] = "1"
+    if dry_run:
+        extra["DRY_RUN"] = "1"
+    env = _base_env(extra)
     cmd = [sys.executable, "-u", str(SCRIPTS["score"]), str(DATA_DIR / "candidates.csv")]
     jid = start_job("score", "Phase 2 — Score", cmd, env)
     return RedirectResponse(f"/run?job={jid}", status_code=303)
 
 
 @app.post("/run/orchestrator")
-async def run_orchestrator(candidates_file: str = Form("")):
+async def run_orchestrator(candidates_file: str = Form(""), dry_run: str = Form("")):
     cfg = load_config()
     ts  = datetime.now().strftime("%Y%m%d_%H%M%S")
     DATA_DIR.mkdir(exist_ok=True)
@@ -333,6 +343,8 @@ async def run_orchestrator(candidates_file: str = Form("")):
     if candidates_file:
         cmd += ["--candidates", str(DATA_DIR / candidates_file)]
     cmd += ["--target", str(cfg["target_contacts"])]
+    if dry_run:
+        cmd += ["--dry-run"]
     jid = start_job("orchestrator", "Phase 3 — Orchestrate", cmd, env)
     return RedirectResponse(f"/run?job={jid}", status_code=303)
 
