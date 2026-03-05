@@ -48,6 +48,10 @@ BATCH_SIZE = min(int(os.environ.get("BATCH_SIZE", "15")), _HARD_CAP_BATCH)
 
 MIN_SCORE = float(os.environ.get("MIN_SCORE", "4.0"))
 
+# Optional LinkedIn seed file — when set, those candidates are merged into the
+# scoring batch alongside web-harvested ones and tagged _candidate_type=linkedin_seed.
+LINKEDIN_SEED_FILE = os.environ.get("LINKEDIN_SEED_FILE", "")
+
 # Snippet length cap — long snippets balloon the prompt without adding signal.
 MAX_SNIPPET_CHARS = int(os.environ.get("MAX_SNIPPET_CHARS", "300"))
 
@@ -125,8 +129,9 @@ QUALITY RULES:
 """
 
 CLASSIFICATION_PROMPT_TEMPLATE = """Below are {count} candidate entities extracted from web search \
-results and SEC EDGAR filings. Each candidate includes: display_name, entity_name (if EDGAR), \
-source_urls, and evidence_snippets from the search results.
+results, SEC EDGAR filings, and LinkedIn connections. Each candidate includes: display_name, \
+entity_name (if EDGAR/LinkedIn), candidate_type (web_page | edgar_entity | linkedin_seed), \
+source_urls, and evidence_snippets.
 
 Your task: for each relevant candidate, output ONE structured contact object.
 
@@ -152,7 +157,7 @@ For each contact you keep, output a JSON object with EXACTLY these fields:
   "evidence_notes": "1-2 sentences explaining relevance and confidence",
   "last_verified_year": integer year or null,
   "_candidate_id": "the candidate_id field from the input",
-  "_candidate_type": "web_page or edgar_entity",
+  "_candidate_type": "web_page | edgar_entity | linkedin_seed",
   "_hit_count": integer
 }}
 
@@ -167,6 +172,19 @@ Candidates:
 # ---------------------------------------------------------------------------
 # Load candidates
 # ---------------------------------------------------------------------------
+
+def load_linkedin_seed(seed_file: str) -> list[dict]:
+    """Load linkedin_seed.csv as additional candidates to score."""
+    if not seed_file or not os.path.exists(seed_file):
+        return []
+    rows = []
+    with open(seed_file, encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            rows.append(row)
+    print(f"[linkedin_seed] Loaded {len(rows)} seeded contacts from {seed_file}")
+    return rows
+
 
 def load_candidates(candidates_file: str) -> list[dict]:
     """Load candidates.csv into a list of dicts."""
@@ -351,6 +369,13 @@ def main() -> None:
     # Load candidates
     candidates = load_candidates(CANDIDATES_FILE)
 
+    # Merge optional LinkedIn seed (auto-detected from LINKEDIN_SEED_FILE env var)
+    if LINKEDIN_SEED_FILE:
+        seed = load_linkedin_seed(LINKEDIN_SEED_FILE)
+        if seed:
+            candidates = candidates + seed
+            print(f"Total after LinkedIn merge: {len(candidates)} candidates")
+
     # Convert to scoring context format
     context_list = [candidate_to_context(c) for c in candidates]
 
@@ -362,6 +387,7 @@ def main() -> None:
     if DRY_RUN:
         print("\n[DRY RUN] Configuration validated. No API calls will be made.")
         print(f"  Candidates file : {CANDIDATES_FILE}")
+        print(f"  LinkedIn seed   : {LINKEDIN_SEED_FILE or '(none)'}")
         print(f"  Candidates loaded: {len(context_list)} rows")
         print(f"  Batch size      : {BATCH_SIZE}  (hard cap: {_HARD_CAP_BATCH})")
         print(f"  Total batches   : {total_batches}")

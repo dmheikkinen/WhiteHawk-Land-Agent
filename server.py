@@ -16,6 +16,9 @@ Then open http://127.0.0.1:5000
 """
 
 import asyncio
+import csv
+import hashlib
+import io
 import json
 import os
 import shutil
@@ -26,7 +29,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -45,6 +48,84 @@ SCRIPTS = {
     "score":        BASE_DIR / "score_contacts.py",
     "orchestrator": BASE_DIR / "run_ohio_landman_assistant.py",
 }
+
+# ---------------------------------------------------------------------------
+# LinkedIn seed  (upload + parse)
+# ---------------------------------------------------------------------------
+# Keywords searched in Position + Company fields (case-insensitive).
+SEED_KEYWORDS = {
+    "landman", "land man", "mineral", "minerals", "royalt", "acquisition",
+    "utica", "marcellus", "appalachia", "appalachian", "oil & gas",
+    "oil and gas", "o&g", "leasing", "upstream", "e&p", "exploration",
+    "petroleum", "wellbore", "completions", "midstream",
+}
+
+# Columns written to linkedin_seed.csv — must match harvest_contacts.py CANDIDATE_FIELDS
+LINKEDIN_CANDIDATE_FIELDS = [
+    "candidate_id", "candidate_type", "display_name", "entity_name",
+    "edgar_hit", "file_date", "form_type", "hit_count",
+    "source_urls", "evidence_snippets", "query_families",
+    "queries", "sources", "first_seen_at",
+]
+
+
+def _linkedin_matches(position: str, company: str) -> bool:
+    text = f"{position} {company}".lower()
+    return any(kw in text for kw in SEED_KEYWORDS)
+
+
+def parse_linkedin_csv(content: str) -> tuple[list[dict], int]:
+    """
+    Parse a LinkedIn connections CSV export.
+
+    LinkedIn export columns (as of 2024):
+      First Name, Last Name, URL, Email Address, Company, Position, Connected On
+
+    Returns (filtered_rows_as_candidate_dicts, total_connections_checked).
+    """
+    reader = csv.DictReader(io.StringIO(content))
+    total = 0
+    rows: list[dict] = []
+    ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    for row in reader:
+        # LinkedIn sometimes uses different capitalizations
+        first    = (row.get("First Name") or row.get("first name") or "").strip()
+        last     = (row.get("Last Name")  or row.get("last name")  or "").strip()
+        position = (row.get("Position")   or row.get("position")   or "").strip()
+        company  = (row.get("Company")    or row.get("company")    or "").strip()
+        url      = (row.get("URL")        or row.get("url")        or "").strip()
+
+        if not (first or last or company):
+            continue          # skip malformed rows
+
+        total += 1
+
+        if not _linkedin_matches(position, company):
+            continue          # keyword filter
+
+        name    = f"{first} {last}".strip()
+        cid     = "li_" + hashlib.md5(f"{name}|{company}".encode()).hexdigest()[:8]
+        snippet = f"{position} at {company} (LinkedIn connection)".strip(" at")
+
+        rows.append({
+            "candidate_id":       cid,
+            "candidate_type":     "linkedin_seed",
+            "display_name":       name,
+            "entity_name":        company,
+            "edgar_hit":          "False",
+            "file_date":          "",
+            "form_type":          "",
+            "hit_count":          "1",
+            "source_urls":        url,
+            "evidence_snippets":  snippet,
+            "query_families":     "linkedin",
+            "queries":            "",
+            "sources":            "linkedin",
+            "first_seen_at":      ts,
+        })
+
+    return rows, total
 
 # ---------------------------------------------------------------------------
 # App
@@ -195,18 +276,21 @@ def list_data_files() -> list[dict]:
 def pipeline_state() -> dict:
     raw  = DATA_DIR / "raw_hits.jsonl"
     cand = DATA_DIR / "candidates.csv"
+    seed = DATA_DIR / "linkedin_seed.csv"
     scored   = sorted(DATA_DIR.glob("ohio_landman_contacts_*.csv"), reverse=True)
     contacts = sorted(DATA_DIR.glob("ohio_contacts_*.csv"),          reverse=True)
     all_out  = scored + contacts
     return {
-        "raw_hits_exists":  raw.exists(),
-        "raw_hits_lines":   _count_lines(raw) if raw.exists() else 0,
-        "candidates_exists": cand.exists(),
-        "candidates_rows":  max(0, _count_lines(cand) - 1) if cand.exists() else 0,
-        "scored_files":     [f.name for f in scored],
-        "contact_files":    [f.name for f in contacts],
-        "latest_output":    all_out[0].name if all_out else None,
-        "all_scored_names": [f.name for f in all_out],
+        "raw_hits_exists":       raw.exists(),
+        "raw_hits_lines":        _count_lines(raw) if raw.exists() else 0,
+        "candidates_exists":     cand.exists(),
+        "candidates_rows":       max(0, _count_lines(cand) - 1) if cand.exists() else 0,
+        "linkedin_seed_exists":  seed.exists(),
+        "linkedin_seed_count":   max(0, _count_lines(seed) - 1) if seed.exists() else 0,
+        "scored_files":          [f.name for f in scored],
+        "contact_files":         [f.name for f in contacts],
+        "latest_output":         all_out[0].name if all_out else None,
+        "all_scored_names":      [f.name for f in all_out],
     }
 
 
@@ -282,13 +366,21 @@ async def setup_save(
 # ---------------------------------------------------------------------------
 
 @app.get("/run", response_class=HTMLResponse)
-async def run_page(request: Request):
+async def run_page(
+    request: Request,
+    linkedin_ok:    str = "",
+    linkedin_total: str = "",
+    linkedin_warn:  str = "",
+):
     phase_jobs = {p: jobs.get(latest_jobs.get(p)) for p in ("harvest", "score", "orchestrator")}
     return _tpl("run.html", request, {
         "phase_jobs":       phase_jobs,
         "harvest_ok":       harvest_ok(),
         "score_ok":         score_ok(),
         "orchestrator_ok":  orchestrator_ok(),
+        "linkedin_ok":      int(linkedin_ok)    if linkedin_ok.isdigit()    else None,
+        "linkedin_total":   int(linkedin_total) if linkedin_total.isdigit() else None,
+        "linkedin_warn":    linkedin_warn,
     })
 
 
@@ -323,6 +415,10 @@ async def run_score(conservative: str = Form(""), dry_run: str = Form("")):
         extra["CONSERVATIVE_MODE"] = "1"
     if dry_run:
         extra["DRY_RUN"] = "1"
+    # Auto-inject LinkedIn seed when present
+    seed_file = DATA_DIR / "linkedin_seed.csv"
+    if seed_file.exists():
+        extra["LINKEDIN_SEED_FILE"] = str(seed_file)
     env = _base_env(extra)
     cmd = [sys.executable, "-u", str(SCRIPTS["score"]), str(DATA_DIR / "candidates.csv")]
     jid = start_job("score", "Phase 2 — Score", cmd, env)
@@ -388,6 +484,48 @@ async def job_status(jid: str):
         return {"error": "not found"}
     return {"status": job["status"], "log_count": len(job["logs"]),
             "return_code": job["return_code"], "finished_at": job["finished_at"]}
+
+
+# ---------------------------------------------------------------------------
+# LinkedIn seed  /data/linkedin-upload  /data/linkedin-clear
+# ---------------------------------------------------------------------------
+
+@app.post("/data/linkedin-upload")
+async def linkedin_upload(file: UploadFile = File(...)):
+    """Parse a LinkedIn connections CSV export and write linkedin_seed.csv."""
+    raw_bytes = await file.read()
+    # Handle UTF-8 BOM (common in LinkedIn exports on Windows)
+    try:
+        content = raw_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        content = raw_bytes.decode("latin-1", errors="replace")
+
+    rows, total = parse_linkedin_csv(content)
+
+    if not rows:
+        return RedirectResponse(
+            f"/run?linkedin_warn=no_matches&linkedin_total={total}", status_code=303
+        )
+
+    DATA_DIR.mkdir(exist_ok=True)
+    seed_file = DATA_DIR / "linkedin_seed.csv"
+    with open(seed_file, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=LINKEDIN_CANDIDATE_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return RedirectResponse(
+        f"/run?linkedin_ok={len(rows)}&linkedin_total={total}", status_code=303
+    )
+
+
+@app.post("/data/linkedin-clear")
+async def linkedin_clear():
+    """Delete linkedin_seed.csv."""
+    seed_file = DATA_DIR / "linkedin_seed.csv"
+    if seed_file.exists():
+        seed_file.unlink()
+    return RedirectResponse("/run", status_code=303)
 
 
 # ---------------------------------------------------------------------------

@@ -207,6 +207,91 @@
 
 
 <!-- ═══════════════════════════════════════
+     LinkedIn Seed  (Optional — before Phase 2)
+═══════════════════════════════════════ -->
+<section class="bg-white border border-violet-200 rounded-2xl shadow-sm overflow-hidden mb-5">
+
+  <!-- Card header -->
+  <div class="px-6 py-4 border-b border-violet-100 flex items-start gap-3">
+    <span class="text-2xl mt-0.5">🔗</span>
+    <div class="flex-1">
+      <div class="text-xs font-semibold text-violet-500 uppercase tracking-wide">Optional — Before Phase 2</div>
+      <h2 class="text-lg font-bold text-slate-800 leading-tight">LinkedIn Seed</h2>
+      <p class="text-sm text-slate-500 mt-1 max-w-xl">
+        Upload your <strong>LinkedIn Connections CSV</strong> to pre-load your network as additional
+        scoring candidates. Only contacts matching oil&nbsp;&amp;&nbsp;gas / minerals keywords are kept
+        and merged automatically when you run Phase&nbsp;2.
+      </p>
+      <p class="text-xs text-slate-400 mt-1">
+        <span class="font-medium text-slate-500">Export from:</span>
+        LinkedIn → Settings → Data privacy → Get a copy of your data → Connections
+      </p>
+    </div>
+    <!-- Seed badge -->
+    <div class="flex-shrink-0 mt-1">
+      {% if ps.linkedin_seed_exists %}
+        <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-violet-100 text-violet-700">
+          ✓ {{ ps.linkedin_seed_count }} seeded
+        </span>
+      {% else %}
+        <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-100 text-slate-500">
+          No seed
+        </span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="px-6 py-4 bg-violet-50 flex flex-wrap items-center gap-4">
+
+    <!-- Flash messages -->
+    {% if linkedin_ok is not none %}
+      <div class="text-xs bg-white border border-violet-200 text-violet-700 rounded-lg px-3 py-2 font-medium">
+        ✓ {{ linkedin_ok }} relevant contact{{ 's' if linkedin_ok != 1 else '' }} loaded
+        from {{ linkedin_total }} LinkedIn connection{{ 's' if linkedin_total != 1 else '' }}
+      </div>
+    {% elif linkedin_warn %}
+      <div class="text-xs bg-white border border-amber-300 text-amber-700 rounded-lg px-3 py-2 font-medium">
+        ⚠ No oil&nbsp;&amp;&nbsp;gas / minerals matches found in the uploaded file
+        ({{ linkedin_total }} connection{{ 's' if linkedin_total != 1 else '' }} checked)
+      </div>
+    {% endif %}
+
+    <!-- Upload form -->
+    <form method="post" action="/data/linkedin-upload" enctype="multipart/form-data"
+          class="flex items-center gap-3 flex-wrap">
+      <label class="text-xs text-slate-600 font-medium whitespace-nowrap">linkedin_connections.csv</label>
+      <input type="file" name="file" accept=".csv"
+             class="text-xs text-slate-600
+                    file:mr-2 file:py-1.5 file:px-3 file:rounded-lg
+                    file:border-0 file:text-xs file:font-semibold
+                    file:bg-white file:text-violet-700 file:border file:border-violet-300
+                    hover:file:bg-violet-50 cursor-pointer"/>
+      <button type="submit"
+              class="px-4 py-1.5 bg-violet-600 hover:bg-violet-700 text-white
+                     text-xs font-semibold rounded-lg transition-colors shadow-sm whitespace-nowrap">
+        Upload &amp; Filter
+      </button>
+    </form>
+
+    {% if ps.linkedin_seed_exists %}
+      <div class="ml-auto flex items-center gap-3">
+        <span class="text-xs text-violet-600 font-medium">
+          Will be merged automatically in Phase 2 →
+        </span>
+        <form method="post" action="/data/linkedin-clear">
+          <button type="submit" class="text-xs text-slate-400 hover:text-red-500 transition-colors">
+            ✕ Clear seed
+          </button>
+        </form>
+      </div>
+    {% endif %}
+
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════
      Phase 2 — Score
 ═══════════════════════════════════════ -->
 {% call(nothing) phase_card(
@@ -223,6 +308,11 @@
     </span>
   {% else %}
     <span class="text-xs bg-amber-100 text-amber-700 rounded-full px-2.5 py-0.5">⚠ candidates.csv missing — run Harvest first</span>
+  {% endif %}
+  {% if ps.linkedin_seed_exists %}
+    <span class="text-xs bg-violet-100 text-violet-700 rounded-full px-2.5 py-0.5 font-medium">
+      + {{ ps.linkedin_seed_count }} LinkedIn seed
+    </span>
   {% endif %}
   {% if ps.scored_files %}
     <span class="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2.5 py-0.5 font-medium">
