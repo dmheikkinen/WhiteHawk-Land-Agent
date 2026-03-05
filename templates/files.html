@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Files — Ohio Landman{% endblock %}
+
+{% block content %}
+
+<div class="flex items-start justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900 mb-1">Output Files</h1>
+    <p class="text-sm text-gray-500">Download raw hits, candidate lists, and scored contact CSVs.</p>
+  </div>
+  <a href="/" class="text-sm text-indigo-600 hover:underline mt-2">← Dashboard</a>
+</div>
+
+<!-- Key file quick-access -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+
+  {% set raw_file = files | selectattr('name', 'equalto', 'raw_hits.jsonl') | first %}
+  <div class="bg-white border rounded-xl p-4 shadow-sm flex flex-col gap-2">
+    <div class="flex items-center gap-2 text-sm font-semibold text-gray-700">
+      <span class="text-lg">📄</span> raw_hits.jsonl
+    </div>
+    <p class="text-xs text-gray-500">Every raw search result from Phase 1 — one JSON object per line.</p>
+    {% if raw_file %}
+      <div class="text-xs text-gray-400">{{ raw_file.size_human }} · {{ raw_file.modified }}</div>
+      <a href="/files/download/raw_hits.jsonl"
+        class="mt-auto inline-block text-center text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 transition-colors">
+        ⬇ Download
+      </a>
+    {% else %}
+      <span class="text-xs text-gray-400 italic mt-auto">Not yet created — run Harvest first</span>
+    {% endif %}
+  </div>
+
+  {% set cand_file = files | selectattr('name', 'equalto', 'candidates.csv') | first %}
+  <div class="bg-white border rounded-xl p-4 shadow-sm flex flex-col gap-2">
+    <div class="flex items-center gap-2 text-sm font-semibold text-gray-700">
+      <span class="text-lg">📋</span> candidates.csv
+    </div>
+    <p class="text-xs text-gray-500">Deduplicated candidates ready for scoring — output of Phase 1.</p>
+    {% if cand_file %}
+      <div class="text-xs text-gray-400">{{ cand_file.size_human }} · {{ cand_file.modified }}</div>
+      <a href="/files/download/candidates.csv"
+        class="mt-auto inline-block text-center text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 transition-colors">
+        ⬇ Download
+      </a>
+    {% else %}
+      <span class="text-xs text-gray-400 italic mt-auto">Not yet created — run Harvest first</span>
+    {% endif %}
+  </div>
+
+  {% if scored_csvs %}
+    {% set best_scored = scored_csvs | first %}
+    <div class="bg-white border rounded-xl p-4 shadow-sm flex flex-col gap-2">
+      <div class="flex items-center gap-2 text-sm font-semibold text-gray-700">
+        <span class="text-lg">⭐</span> Latest Scored Contacts
+      </div>
+      <p class="text-xs text-gray-500">Most recent Phase 2 / Phase 3 output — your final contact list.</p>
+      <div class="text-xs text-gray-400 truncate">{{ best_scored }}</div>
+      <a href="/files/download/{{ best_scored }}"
+        class="mt-auto inline-block text-center text-xs font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg px-3 py-1.5 transition-colors">
+        ⬇ Download Latest
+      </a>
+    </div>
+  {% else %}
+    <div class="bg-white border rounded-xl p-4 shadow-sm flex flex-col gap-2">
+      <div class="flex items-center gap-2 text-sm font-semibold text-gray-700">
+        <span class="text-lg">⭐</span> Scored Contacts
+      </div>
+      <p class="text-xs text-gray-500">Run Phase 2 (Score) or Phase 3 (Orchestrate) to generate contact files.</p>
+      <span class="text-xs text-gray-400 italic mt-auto">No scored files yet</span>
+    </div>
+  {% endif %}
+
+</div>
+
+<!-- All files table -->
+{% if files %}
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
+    <h2 class="text-sm font-semibold text-gray-600">All Output Files</h2>
+  </div>
+  <table class="w-full text-sm">
+    <thead class="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200">
+      <tr>
+        <th class="px-5 py-2.5 text-left">Filename</th>
+        <th class="px-5 py-2.5 text-left">Type</th>
+        <th class="px-5 py-2.5 text-left">Size</th>
+        <th class="px-5 py-2.5 text-left">Modified</th>
+        <th class="px-5 py-2.5 text-right">Action</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for f in files %}
+      <tr class="hover:bg-gray-50 transition-colors">
+        <td class="px-5 py-2.5 font-mono text-xs text-gray-700">{{ f.name }}</td>
+        <td class="px-5 py-2.5">
+          <span class="text-xs font-medium px-2 py-0.5 rounded-full
+            {% if f.ext == 'CSV' %}bg-blue-100 text-blue-700
+            {% elif f.ext == 'JSONL' %}bg-purple-100 text-purple-700
+            {% else %}bg-gray-100 text-gray-600{% endif %}">
+            {{ f.ext }}
+          </span>
+        </td>
+        <td class="px-5 py-2.5 text-gray-500 text-xs">{{ f.size_human }}</td>
+        <td class="px-5 py-2.5 text-gray-500 text-xs">{{ f.modified }}</td>
+        <td class="px-5 py-2.5 text-right">
+          <a href="/files/download/{{ f.name }}"
+            class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline">
+            ⬇ Download
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center py-16 text-gray-400">
+  <p class="text-4xl mb-3">📂</p>
+  <p class="font-medium">No output files yet</p>
+  <p class="text-sm mt-1">Run the Harvest phase to generate your first files.</p>
+  <a href="/" class="mt-4 inline-block text-sm text-indigo-600 hover:underline">← Go to Dashboard</a>
+</div>
+{% endif %}
+
+{% endblock %}

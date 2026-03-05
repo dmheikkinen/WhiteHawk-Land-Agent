@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Logs — Ohio Landman{% endblock %}
+
+{% block content %}
+
+<h1 class="text-2xl font-bold text-gray-900 mb-6">Run Logs</h1>
+
+<div class="flex gap-6">
+
+  <!-- ── Left: job list ── -->
+  <div class="w-56 flex-shrink-0">
+    <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Jobs</h2>
+    {% if jobs %}
+      <nav class="space-y-1">
+        {% for job in jobs %}
+          <a href="/logs/{{ job.id }}"
+            class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
+              {% if selected_job and selected_job.id == job.id %}bg-indigo-50 text-indigo-700 font-medium border border-indigo-200
+              {% else %}text-gray-600 hover:bg-gray-100{% endif %}">
+            {% if job.status == 'running' %}
+              <span class="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 pulse"></span>
+            {% elif job.status == 'done' %}
+              <span class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></span>
+            {% else %}
+              <span class="w-2 h-2 rounded-full bg-red-500 flex-shrink-0"></span>
+            {% endif %}
+            <div class="min-w-0">
+              <div class="truncate capitalize">{{ job.phase }}</div>
+              <div class="text-xs text-gray-400 truncate">{{ job.started_at[11:] }}</div>
+            </div>
+          </a>
+        {% endfor %}
+      </nav>
+    {% else %}
+      <p class="text-sm text-gray-400 px-2">No jobs yet. Run a phase from the <a href="/" class="text-indigo-600 hover:underline">dashboard</a>.</p>
+    {% endif %}
+  </div>
+
+  <!-- ── Right: log terminal ── -->
+  <div class="flex-1 min-w-0">
+    {% if selected_job %}
+
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <span class="font-semibold text-gray-800">{{ selected_job.label }}</span>
+          <span class="text-xs text-gray-400 ml-2">#{{ selected_job.id }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <!-- Status badge -->
+          <span id="status-badge"
+            class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full
+              {% if selected_job.status == 'running' %}bg-blue-100 text-blue-700
+              {% elif selected_job.status == 'done' %}bg-green-100 text-green-700
+              {% else %}bg-red-100 text-red-700{% endif %}">
+            {% if selected_job.status == 'running' %}
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 pulse"></span> Running
+            {% elif selected_job.status == 'done' %}
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Done
+            {% else %}
+              <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Error
+            {% endif %}
+          </span>
+          <!-- Auto-scroll toggle -->
+          <label class="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+            <input type="checkbox" id="autoscroll-toggle" checked class="rounded" />
+            Auto-scroll
+          </label>
+        </div>
+      </div>
+
+      <!-- Terminal -->
+      <div id="log-box"
+        class="log-terminal bg-gray-950 text-gray-100 rounded-xl p-4 overflow-y-auto"
+        style="height: 62vh;">
+        <!-- Previously captured log lines (for completed/old jobs) -->
+        {% for line in selected_job.logs %}
+          <div class="{% if '[ERROR]' in line or 'Error' in line or 'FAILED' in line %}text-red-400{% elif '[WARN]' in line %}text-yellow-400{% elif 'Done' in line or 'Written' in line or 'Total' in line %}text-green-400{% else %}text-gray-200{% endif %}">{{ line }}</div>
+        {% endfor %}
+        <div id="log-end"></div>
+      </div>
+
+      <!-- Timestamps -->
+      <div class="flex justify-between text-xs text-gray-400 mt-2 px-1">
+        <span>Started: {{ selected_job.started_at }}</span>
+        {% if selected_job.finished_at %}
+          <span>Finished: {{ selected_job.finished_at }}</span>
+        {% endif %}
+      </div>
+
+      <!-- SSE client — only streams if job is still running -->
+      {% if selected_job.status == 'running' %}
+      <script>
+        const logBox    = document.getElementById('log-box');
+        const logEnd    = document.getElementById('log-end');
+        const statusBadge = document.getElementById('status-badge');
+        const autoToggle  = document.getElementById('autoscroll-toggle');
+        const JOB_ID = "{{ selected_job.id }}";
+
+        function appendLine(text) {
+          const div = document.createElement('div');
+          div.textContent = text;
+          // Simple colour rules matching the Jinja ones above
+          if (text.includes('[ERROR]') || text.includes('Error') || text.includes('FAILED')) {
+            div.className = 'text-red-400';
+          } else if (text.includes('[WARN]')) {
+            div.className = 'text-yellow-400';
+          } else if (text.includes('Done') || text.includes('Written') || text.includes('Total')) {
+            div.className = 'text-green-400';
+          } else {
+            div.className = 'text-gray-200';
+          }
+          logBox.insertBefore(div, logEnd);
+          if (autoToggle.checked) logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        // Skip lines we already rendered server-side
+        const alreadySent = {{ selected_job.logs | length }};
+        let linesSeen = 0;
+
+        const source = new EventSource('/jobs/' + JOB_ID + '/stream');
+
+        source.onmessage = function(e) {
+          linesSeen++;
+          if (linesSeen > alreadySent) appendLine(e.data);
+        };
+
+        source.addEventListener('done', function(e) {
+          source.close();
+          const ok = e.data === 'done';
+          statusBadge.className = 'inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full ' +
+            (ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700');
+          statusBadge.innerHTML = ok
+            ? '<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Done'
+            : '<span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Error';
+        });
+
+        source.onerror = function() { source.close(); };
+
+        // Initial scroll to bottom
+        logBox.scrollTop = logBox.scrollHeight;
+      </script>
+      {% else %}
+      <script>
+        // Scroll to bottom for completed jobs too
+        document.getElementById('log-box').scrollTop = document.getElementById('log-box').scrollHeight;
+        document.getElementById('autoscroll-toggle').checked = false;
+      </script>
+      {% endif %}
+
+    {% else %}
+      <div class="flex items-center justify-center h-64 text-gray-400 text-sm">
+        Select a job from the list to view its logs.
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% endblock %}

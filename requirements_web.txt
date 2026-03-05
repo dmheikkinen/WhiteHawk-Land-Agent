@@ -1,0 +1,5 @@
+# Ohio Landman Web UI — additional dependencies
+# The pipeline scripts already require: openai, requests
+# This file adds only what the web layer needs.
+
+flask>=3.0

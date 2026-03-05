@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Settings — Ohio Landman{% endblock %}
+
+{% block content %}
+
+<h1 class="text-2xl font-bold text-gray-900 mb-1">Settings</h1>
+<p class="text-sm text-gray-500 mb-8">
+  API keys are stored server-side in <code class="bg-gray-100 px-1 rounded">config.json</code> and never sent to the browser.
+</p>
+
+<form method="post" action="/settings" class="space-y-8 max-w-2xl">
+
+  <!-- ── API Keys ── -->
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+    <h2 class="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+      🔑 API Keys
+    </h2>
+
+    <!-- OpenAI -->
+    <div class="mb-5">
+      <label class="block text-sm font-medium text-gray-700 mb-1">
+        OpenAI API Key
+        {% if openai_set %}
+          <span class="ml-2 text-xs font-normal text-green-600 bg-green-100 px-2 py-0.5 rounded-full">✓ Set</span>
+        {% else %}
+          <span class="ml-2 text-xs font-normal text-red-600 bg-red-100 px-2 py-0.5 rounded-full">Not set</span>
+        {% endif %}
+      </label>
+      <input type="password" name="openai_api_key" autocomplete="off"
+        placeholder="{{ 'Leave blank to keep existing key' if openai_set else 'sk-proj-...' }}"
+        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none" />
+      <p class="text-xs text-gray-400 mt-1">
+        Get yours at
+        <a href="https://platform.openai.com/api-keys" target="_blank" class="text-indigo-600 hover:underline">platform.openai.com/api-keys</a>
+      </p>
+    </div>
+
+    <!-- SerpAPI -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">
+        SerpAPI Key
+        {% if serpapi_set %}
+          <span class="ml-2 text-xs font-normal text-green-600 bg-green-100 px-2 py-0.5 rounded-full">✓ Set</span>
+        {% else %}
+          <span class="ml-2 text-xs font-normal text-red-600 bg-red-100 px-2 py-0.5 rounded-full">Not set</span>
+        {% endif %}
+      </label>
+      <input type="password" name="serpapi_api_key" autocomplete="off"
+        placeholder="{{ 'Leave blank to keep existing key' if serpapi_set else 'Your SerpAPI key' }}"
+        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none" />
+      <p class="text-xs text-gray-400 mt-1">
+        Get yours at
+        <a href="https://serpapi.com/manage-api-key" target="_blank" class="text-indigo-600 hover:underline">serpapi.com/manage-api-key</a>
+        — Free tier: 100 searches/month. One full harvest run uses ~80–90.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Pipeline settings ── -->
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+    <h2 class="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+      ⚙️ Pipeline Settings
+    </h2>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+
+      <!-- Assistant ID -->
+      <div class="sm:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">OpenAI Assistant ID</label>
+        <input type="text" name="assistant_id" value="{{ cfg.assistant_id }}"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-400 focus:outline-none" />
+        <p class="text-xs text-gray-400 mt-1">The ID of your Ohio Landman assistant (starts with asst_…)</p>
+      </div>
+
+      <!-- Target contacts -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Target Contacts</label>
+        <input type="number" name="target_contacts" value="{{ cfg.target_contacts }}" min="10" max="200"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none" />
+        <p class="text-xs text-gray-400 mt-1">How many contacts to request from the orchestrator</p>
+      </div>
+
+      <!-- Score model -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Scoring Model</label>
+        <select name="score_model"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-400 focus:outline-none">
+          {% for m in ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1'] %}
+            <option value="{{ m }}" {% if cfg.score_model == m %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+        <p class="text-xs text-gray-400 mt-1">gpt-4o-mini is fastest and cheapest (~$0.10 per run)</p>
+      </div>
+
+      <!-- Batch size -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Batch Size</label>
+        <input type="number" name="batch_size" value="{{ cfg.batch_size }}" min="5" max="50"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none" />
+        <p class="text-xs text-gray-400 mt-1">Candidates per OpenAI scoring call (10–30 recommended)</p>
+      </div>
+
+      <!-- Min score -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Minimum Relevance Score</label>
+        <input type="number" name="min_score" value="{{ cfg.min_score }}" min="0" max="10" step="0.5"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none" />
+        <p class="text-xs text-gray-400 mt-1">Contacts below this score (0–10) are excluded (default: 4.0)</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Save button -->
+  <div class="flex items-center gap-4">
+    <button type="submit"
+      class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl text-sm transition-colors shadow-sm">
+      Save Settings
+    </button>
+    <a href="/" class="text-sm text-gray-500 hover:text-gray-700">Cancel</a>
+  </div>
+
+</form>
+
+{% endblock %}

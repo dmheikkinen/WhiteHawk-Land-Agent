@@ -105,12 +105,24 @@ def perform_web_search(query: str, num: int = SERPAPI_RESULTS_PER_QUERY) -> list
 
 def extract_json(text: str) -> str:
     """
-    Strip optional ```json ... ``` fences and return the inner JSON string.
-    Falls back to returning the original text if no fence is found.
+    Strip optional ```json ... ``` fences and // comment lines, then return
+    the inner JSON string.  LLMs occasionally inject JS-style // comments
+    (e.g. '// list truncated…') which make json.loads() fail.
     """
-    # Remove ```json or ``` fences
+    # 1) Remove ```json or ``` fences
     stripped = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.IGNORECASE)
     stripped = re.sub(r"\s*```$", "", stripped.strip())
+
+    # 2) Strip // comment lines.
+    #    Safe to key on line-start whitespace: real // in URLs always appears
+    #    inside a quoted string, never as the first non-space token on a line.
+    lines = stripped.split("\n")
+    lines = [ln for ln in lines if not ln.lstrip().startswith("//")]
+    stripped = "\n".join(lines)
+
+    # 3) Trim any trailing comma before ] or } which can also break parsing
+    stripped = re.sub(r",\s*([\]\}])", r"\1", stripped)
+
     return stripped.strip()
 
 
@@ -204,7 +216,9 @@ def build_user_prompt(candidates_context: str = "") -> str:
         "Each contact object MUST include: name, role, organization, segment, geo_focus, "
         "relevance_score, tier, email, phone, website, linkedin_url, "
         "source_urls (array of strings), evidence_notes, last_verified_year. "
-        "Do not include any text before or after the JSON. Do not ask questions."
+        "Do not include any text before or after the JSON. Do not ask questions. "
+        "Do not truncate, abbreviate, or add any comments (// or /* */) inside the JSON — "
+        "output the complete, valid JSON only."
     )
     return base
 
