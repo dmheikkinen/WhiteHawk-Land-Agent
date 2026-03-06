@@ -1,6 +1,16 @@
 # Ohio Landman Pipeline — Windows quick-start script
 #
-# Usage (from the project directory in PowerShell):
+# ── FIRST-TIME ONLY: unlock PowerShell scripts ────────────────────────────────
+# Windows blocks .ps1 files by default.  Run this once in PowerShell, then
+# re-run .\start.ps1 normally:
+#
+#   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+#
+# Alternatively, bypass the policy for a single run (no permanent change):
+#
+#   powershell -ExecutionPolicy Bypass -File .\start.ps1
+#
+# ── Normal usage ──────────────────────────────────────────────────────────────
 #   .\start.ps1
 #   .\start.ps1 -Port 8080
 #

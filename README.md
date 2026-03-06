@@ -33,6 +33,12 @@ Docker is optional (for VM deployment).
 
 ### Windows (PowerShell) — one command
 
+> **First-time only:** Windows blocks `.ps1` scripts by default. Run this once to unlock them for your account (no admin required), then proceed:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+> Prefer not to change the policy? Use this instead every time: `powershell -ExecutionPolicy Bypass -File .\start.ps1`
+
 ```powershell
 .\start.ps1
 ```
@@ -302,6 +308,21 @@ Output files appear in `./data/` (mounted volume — persists container restarts
 git pull
 docker compose up -d --build
 ```
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `cannot be loaded because running scripts is disabled` | Run once: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`, then retry `.\start.ps1` |
+| `python: command not found` | Reinstall Python from python.org — check **"Add Python to PATH"** during setup |
+| Both API key badges show ✗ | Keys aren't loading — re-open `.env`, check for typos or extra spaces, re-run `.\start.ps1` |
+| Phase 1 finishes with 0 candidates | SerpAPI key is wrong or out of credits — check [serpapi.com/manage-api-key](https://serpapi.com/manage-api-key) |
+| Phase 2 fails immediately | OpenAI key is wrong or account has no credits — check [platform.openai.com/settings/billing](https://platform.openai.com/settings/billing) |
+| Browser shows "connection refused" | The PowerShell/terminal window was closed — re-run `.\start.ps1` |
+| Score fails with "Permission denied" on CSV | Close the file in Excel first, then retry; or use **Reset Data** on the Downloads page to archive it |
+| Phase 1 resumes old results instead of starting fresh | That's intentional — it's resume-safe. Use **Reset Data** on Downloads page to start clean |
 
 ---
 
