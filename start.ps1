@@ -46,9 +46,12 @@ if (-not (Test-Path ".venv")) {
 }
 
 # -- 2) Dependencies ----------------------------------------------------------
+# Use "python -m pip" instead of the pip.exe directly.
+# On Windows, pip cannot replace its own .exe while it is running, so
+# "pip install --upgrade pip" raises an ERROR.  "python -m pip" avoids this.
 Write-Step "Installing / verifying dependencies..."
-& .venv\Scripts\pip install --upgrade pip --quiet
-& .venv\Scripts\pip install -r requirements.txt --quiet
+& .venv\Scripts\python.exe -m pip install --upgrade pip --quiet
+& .venv\Scripts\python.exe -m pip install -r requirements.txt --quiet
 Write-Ok "Dependencies up to date"
 
 # -- 3) Scaffold .env ---------------------------------------------------------
