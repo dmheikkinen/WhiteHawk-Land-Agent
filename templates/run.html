@@ -233,8 +233,10 @@
         and merged automatically when you run Phase&nbsp;2.
       </p>
       <p class="text-xs text-slate-400 mt-1">
-        <span class="font-medium text-slate-500">Export from:</span>
-        LinkedIn → Settings → Data privacy → Get a copy of your data → Connections
+        <span class="font-medium text-slate-500">Upload:</span>
+        The full LinkedIn export <strong>.zip</strong> (recommended) <em>or</em> just
+        <strong>Connections.csv</strong> from inside it.
+        Export from: LinkedIn → Settings → Data privacy → Get a copy of your data
       </p>
     </div>
     <!-- Seed badge -->
@@ -269,18 +271,41 @@
 
     <!-- Upload form -->
     <form method="post" action="/data/linkedin-upload" enctype="multipart/form-data"
-          class="flex items-center gap-3 flex-wrap">
-      <label class="text-xs text-slate-600 font-medium whitespace-nowrap">linkedin_connections.csv</label>
-      <input type="file" name="file" accept=".csv"
-             class="text-xs text-slate-600
-                    file:mr-2 file:py-1.5 file:px-3 file:rounded-lg
-                    file:border-0 file:text-xs file:font-semibold
-                    file:bg-white file:text-violet-700 file:border file:border-violet-300
-                    hover:file:bg-violet-50 cursor-pointer"/>
+          class="flex flex-wrap items-end gap-3">
+
+      <!-- File picker -->
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">LinkedIn export (.zip or Connections.csv)</label>
+        <input type="file" name="file" accept=".csv,.zip"
+               class="text-xs text-slate-600
+                      file:mr-2 file:py-1.5 file:px-3 file:rounded-lg
+                      file:border-0 file:text-xs file:font-semibold
+                      file:bg-white file:text-violet-700 file:border file:border-violet-300
+                      hover:file:bg-violet-50 cursor-pointer"/>
+      </div>
+
+      <!-- Filter mode -->
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Filter</label>
+        <select name="filter_mode"
+                class="text-xs border border-violet-200 rounded-lg px-2 py-1.5 bg-white text-slate-700
+                       focus:ring-2 focus:ring-violet-400 focus:outline-none">
+          <option value="broad" {% if filter_mode == 'broad' or not filter_mode %}selected{% endif %}>
+            Broad — energy, finance, law, real estate
+          </option>
+          <option value="narrow" {% if filter_mode == 'narrow' %}selected{% endif %}>
+            Narrow — oil &amp; gas / minerals only
+          </option>
+          <option value="none" {% if filter_mode == 'none' %}selected{% endif %}>
+            None — import all connections (let AI score)
+          </option>
+        </select>
+      </div>
+
       <button type="submit"
               class="px-4 py-1.5 bg-violet-600 hover:bg-violet-700 text-white
                      text-xs font-semibold rounded-lg transition-colors shadow-sm whitespace-nowrap">
-        Upload &amp; Filter
+        Upload &amp; Import
       </button>
     </form>
 

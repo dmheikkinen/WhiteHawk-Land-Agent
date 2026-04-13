@@ -26,6 +26,7 @@ import subprocess
 import sys
 import threading
 import uuid
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -52,12 +53,26 @@ SCRIPTS = {
 # ---------------------------------------------------------------------------
 # LinkedIn seed  (upload + parse)
 # ---------------------------------------------------------------------------
-# Keywords searched in Position + Company fields (case-insensitive).
-SEED_KEYWORDS = {
+# LinkedIn seed — keyword filter sets
+# ---------------------------------------------------------------------------
+
+# Narrow: oil & gas / minerals only
+SEED_KEYWORDS_NARROW = {
     "landman", "land man", "mineral", "minerals", "royalt", "acquisition",
     "utica", "marcellus", "appalachia", "appalachian", "oil & gas",
     "oil and gas", "o&g", "leasing", "upstream", "e&p", "exploration",
     "petroleum", "wellbore", "completions", "midstream",
+}
+
+# Broad: energy, finance, law, real estate, investment — anyone who might transact
+SEED_KEYWORDS_BROAD = SEED_KEYWORDS_NARROW | {
+    "energy", "natural gas", "pipeline", "private equity", "investment",
+    "fund", "capital", "asset management", "portfolio", "venture",
+    "real estate", "property", "attorney", "lawyer", "law firm", "counsel",
+    "cpa", "accountant", "tax", "trust", "estate", "family office",
+    "broker", "dealer", "trader", "banker", "finance", "financial",
+    "geologist", "engineer", "reservoir", "production", "drilling",
+    "operator", "producer", "refinery", "lng", "gas", "oil",
 }
 
 # Columns written to linkedin_seed.csv — must match harvest_contacts.py CANDIDATE_FIELDS
@@ -70,27 +85,72 @@ LINKEDIN_CANDIDATE_FIELDS = [
 ]
 
 
-def _linkedin_matches(position: str, company: str) -> bool:
-    text = f"{position} {company}".lower()
-    return any(kw in text for kw in SEED_KEYWORDS)
-
-
-def parse_linkedin_csv(content: str) -> tuple[list[dict], int]:
+def _extract_connections_csv(raw_bytes: bytes, filename: str) -> str:
     """
-    Parse a LinkedIn connections CSV export.
-
-    LinkedIn export columns (as of 2024):
-      First Name, Last Name, URL, Email Address, Company, Position, Connected On
-
-    Returns (filtered_rows_as_candidate_dicts, total_connections_checked).
+    Accept either a plain CSV or a LinkedIn export .zip.
+    Returns the decoded text content of Connections.csv.
     """
+    fname = (filename or "").lower()
+    if fname.endswith(".zip") or raw_bytes[:2] == b"PK":
+        with zipfile.ZipFile(io.BytesIO(raw_bytes)) as zf:
+            # Find Connections.csv (may be at root or in a subfolder)
+            candidates = [n for n in zf.namelist()
+                          if n.lower().endswith("connections.csv")]
+            if not candidates:
+                raise ValueError(
+                    "No Connections.csv found in the zip. "
+                    "Upload the full LinkedIn data export zip."
+                )
+            with zf.open(candidates[0]) as f:
+                raw = f.read()
+    else:
+        raw = raw_bytes
+
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("latin-1", errors="replace")
+
+
+def _fix_linkedin_headers(content: str) -> str:
+    """
+    LinkedIn Connections.csv exports have 2-3 junk rows before the real headers.
+    Find the row containing 'First Name' and strip everything above it.
+    """
+    lines = content.splitlines()
+    for i, line in enumerate(lines):
+        if "First Name" in line:
+            return "\n".join(lines[i:])
+    return content  # fallback — return as-is
+
+
+def parse_linkedin_csv(content: str, filter_mode: str = "broad") -> tuple[list[dict], int]:
+    """
+    Parse a LinkedIn Connections.csv export.
+
+    filter_mode:
+        "none"   — import every connection (let AI scorer decide relevance)
+        "broad"  — keep anyone in energy, finance, law, real estate (default)
+        "narrow" — keep only oil & gas / minerals keywords
+
+    Returns (candidate_dicts, total_connections_checked).
+    """
+    content = _fix_linkedin_headers(content)
+
+    if filter_mode == "narrow":
+        keywords = SEED_KEYWORDS_NARROW
+    elif filter_mode == "broad":
+        keywords = SEED_KEYWORDS_BROAD
+    else:
+        keywords = None  # no filter
+
+    cfg = load_config()
     reader = csv.DictReader(io.StringIO(content))
     total = 0
     rows: list[dict] = []
     ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
 
     for row in reader:
-        # LinkedIn sometimes uses different capitalizations
         first    = (row.get("First Name") or row.get("first name") or "").strip()
         last     = (row.get("Last Name")  or row.get("last name")  or "").strip()
         position = (row.get("Position")   or row.get("position")   or "").strip()
@@ -98,18 +158,19 @@ def parse_linkedin_csv(content: str) -> tuple[list[dict], int]:
         url      = (row.get("URL")        or row.get("url")        or "").strip()
 
         if not (first or last or company):
-            continue          # skip malformed rows
+            continue
 
         total += 1
 
-        if not _linkedin_matches(position, company):
-            continue          # keyword filter
+        if keywords is not None:
+            text = f"{position} {company}".lower()
+            if not any(kw in text for kw in keywords):
+                continue
 
         name    = f"{first} {last}".strip()
         cid     = "li_" + hashlib.md5(f"{name}|{company}".encode()).hexdigest()[:8]
         snippet = f"{position} at {company} (LinkedIn connection)".strip(" at")
 
-        cfg = load_config()
         rows.append({
             "candidate_id":       cid,
             "candidate_type":     "linkedin_seed",
@@ -413,6 +474,7 @@ async def run_page(
     linkedin_ok:    str = "",
     linkedin_total: str = "",
     linkedin_warn:  str = "",
+    filter_mode:    str = "",
 ):
     phase_jobs = {p: jobs.get(latest_jobs.get(p)) for p in ("harvest", "score", "orchestrator")}
     return _tpl("run.html", request, {
@@ -423,6 +485,7 @@ async def run_page(
         "linkedin_ok":      int(linkedin_ok)    if linkedin_ok.isdigit()    else None,
         "linkedin_total":   int(linkedin_total) if linkedin_total.isdigit() else None,
         "linkedin_warn":    linkedin_warn,
+        "filter_mode":      filter_mode,
     })
 
 
@@ -564,16 +627,23 @@ async def job_status(jid: str):
 # ---------------------------------------------------------------------------
 
 @app.post("/data/linkedin-upload")
-async def linkedin_upload(file: UploadFile = File(...)):
-    """Parse a LinkedIn connections CSV export and write linkedin_seed.csv."""
+async def linkedin_upload(
+    file:        UploadFile = File(...),
+    filter_mode: str        = Form("broad"),   # "none" | "broad" | "narrow"
+):
+    """
+    Parse a LinkedIn Connections CSV or full export zip and write linkedin_seed.csv.
+    Accepts: Connections.csv, or the full LinkedIn export .zip containing it.
+    """
     raw_bytes = await file.read()
-    # Handle UTF-8 BOM (common in LinkedIn exports on Windows)
     try:
-        content = raw_bytes.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        content = raw_bytes.decode("latin-1", errors="replace")
+        content = _extract_connections_csv(raw_bytes, file.filename or "")
+    except Exception as exc:
+        return RedirectResponse(
+            f"/run?linkedin_warn={str(exc)[:80]}&linkedin_total=0", status_code=303
+        )
 
-    rows, total = parse_linkedin_csv(content)
+    rows, total = parse_linkedin_csv(content, filter_mode=filter_mode)
 
     if not rows:
         return RedirectResponse(
@@ -588,7 +658,8 @@ async def linkedin_upload(file: UploadFile = File(...)):
         writer.writerows(rows)
 
     return RedirectResponse(
-        f"/run?linkedin_ok={len(rows)}&linkedin_total={total}", status_code=303
+        f"/run?linkedin_ok={len(rows)}&linkedin_total={total}&filter_mode={filter_mode}",
+        status_code=303,
     )
 
 
