@@ -1,4 +1,4 @@
-"""server.py — Ohio Landman Pipeline Web UI (FastAPI + Jinja2)
+"""server.py — Landman Pipeline Web UI (FastAPI + Jinja2)
 
 Three pages:
   /setup       — Check & set API keys; configure pipeline settings
@@ -63,6 +63,7 @@ SEED_KEYWORDS = {
 # Columns written to linkedin_seed.csv — must match harvest_contacts.py CANDIDATE_FIELDS
 LINKEDIN_CANDIDATE_FIELDS = [
     "candidate_id", "candidate_type", "display_name", "entity_name",
+    "state", "county", "source_type", "parcel_context",
     "edgar_hit", "file_date", "form_type", "hit_count",
     "source_urls", "evidence_snippets", "query_families",
     "queries", "sources", "first_seen_at",
@@ -108,11 +109,16 @@ def parse_linkedin_csv(content: str) -> tuple[list[dict], int]:
         cid     = "li_" + hashlib.md5(f"{name}|{company}".encode()).hexdigest()[:8]
         snippet = f"{position} at {company} (LinkedIn connection)".strip(" at")
 
+        cfg = load_config()
         rows.append({
             "candidate_id":       cid,
             "candidate_type":     "linkedin_seed",
             "display_name":       name,
             "entity_name":        company,
+            "state":              cfg.get("geo_state",  ""),
+            "county":             cfg.get("geo_county", ""),
+            "source_type":        "linkedin_seed",
+            "parcel_context":     "",
             "edgar_hit":          "False",
             "file_date":          "",
             "form_type":          "",
@@ -130,7 +136,7 @@ def parse_linkedin_csv(content: str) -> tuple[list[dict], int]:
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Ohio Landman Pipeline", docs_url=None, redoc_url=None)
+app = FastAPI(title="Landman Pipeline", docs_url=None, redoc_url=None)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 # ---------------------------------------------------------------------------
@@ -142,6 +148,17 @@ DEFAULT_CONFIG = {
     "score_model":     "gpt-4o-mini",
     "batch_size":      20,
     "min_score":       4.0,
+    # Geography
+    "geo_state":       "Ohio",
+    "geo_county":      "Belmont",
+    "geo_region":      "",
+    "geo_basin":       "Appalachian Basin",
+    # Source class toggles (all on by default except county_tax)
+    "source_google":      True,
+    "source_marketplaces": True,
+    "source_linkedin":    True,
+    "source_sec":         True,
+    "source_county_tax":  False,
 }
 
 
@@ -277,8 +294,13 @@ def pipeline_state() -> dict:
     raw  = DATA_DIR / "raw_hits.jsonl"
     cand = DATA_DIR / "candidates.csv"
     seed = DATA_DIR / "linkedin_seed.csv"
-    scored   = sorted(DATA_DIR.glob("ohio_landman_contacts_*.csv"), reverse=True)
-    contacts = sorted(DATA_DIR.glob("ohio_contacts_*.csv"),          reverse=True)
+    # Glob both new and legacy output patterns for backwards compatibility
+    scored   = sorted(
+        list(DATA_DIR.glob("landman_contacts_*.csv")) +
+        list(DATA_DIR.glob("ohio_landman_contacts_*.csv")),
+        reverse=True,
+    )
+    contacts = sorted(DATA_DIR.glob("ohio_contacts_*.csv"), reverse=True)
     all_out  = scored + contacts
     return {
         "raw_hits_exists":       raw.exists(),
@@ -348,6 +370,17 @@ async def setup_save(
     score_model:     str   = Form("gpt-4o-mini"),
     batch_size:      int   = Form(20),
     min_score:       float = Form(4.0),
+    # Geography
+    geo_state:       str   = Form("Ohio"),
+    geo_county:      str   = Form("Belmont"),
+    geo_region:      str   = Form(""),
+    geo_basin:       str   = Form(""),
+    # Source class toggles (checkbox — present = on, absent = off)
+    source_google:      str = Form(""),
+    source_marketplaces: str = Form(""),
+    source_linkedin:    str = Form(""),
+    source_sec:         str = Form(""),
+    source_county_tax:  str = Form(""),
 ):
     cfg = load_config()
     cfg.update({
@@ -356,6 +389,15 @@ async def setup_save(
         "score_model":     score_model,
         "batch_size":      batch_size,
         "min_score":       min_score,
+        "geo_state":       geo_state.strip()  or "Ohio",
+        "geo_county":      geo_county.strip() or "Belmont",
+        "geo_region":      geo_region.strip(),
+        "geo_basin":       geo_basin.strip(),
+        "source_google":      bool(source_google),
+        "source_marketplaces": bool(source_marketplaces),
+        "source_linkedin":    bool(source_linkedin),
+        "source_sec":         bool(source_sec),
+        "source_county_tax":  bool(source_county_tax),
     })
     save_config(cfg)
     return RedirectResponse("/setup?saved=1", status_code=303)
@@ -386,10 +428,22 @@ async def run_page(
 
 @app.post("/run/harvest")
 async def run_harvest(conservative: str = Form(""), dry_run: str = Form("")):
+    cfg = load_config()
     DATA_DIR.mkdir(exist_ok=True)
     extra: dict = {
-        "RAW_HITS_FILE":   str(DATA_DIR / "raw_hits.jsonl"),
-        "CANDIDATES_FILE": str(DATA_DIR / "candidates.csv"),
+        "RAW_HITS_FILE":        str(DATA_DIR / "raw_hits.jsonl"),
+        "CANDIDATES_FILE":      str(DATA_DIR / "candidates.csv"),
+        # Geography
+        "GEO_STATE":            cfg.get("geo_state",  "Ohio"),
+        "GEO_COUNTY":           cfg.get("geo_county", "Belmont"),
+        "GEO_REGION":           cfg.get("geo_region", ""),
+        "GEO_BASIN":            cfg.get("geo_basin",  "Appalachian Basin"),
+        # Source class toggles
+        "SOURCE_GOOGLE":        "1" if cfg.get("source_google",      True)  else "0",
+        "SOURCE_MARKETPLACES":  "1" if cfg.get("source_marketplaces", True) else "0",
+        "SOURCE_LINKEDIN":      "1" if cfg.get("source_linkedin",    True)  else "0",
+        "SOURCE_SEC":           "1" if cfg.get("source_sec",         True)  else "0",
+        "SOURCE_COUNTY_TAX":    "1" if cfg.get("source_county_tax",  False) else "0",
     }
     if conservative:
         extra["CONSERVATIVE_MODE"] = "1"
@@ -409,7 +463,12 @@ async def run_score(conservative: str = Form(""), dry_run: str = Form("")):
         "SCORE_MODEL":  cfg["score_model"],
         "BATCH_SIZE":   cfg["batch_size"],
         "MIN_SCORE":    cfg["min_score"],
-        "OUTPUT_FILE":  str(DATA_DIR / f"ohio_landman_contacts_{ts}.csv"),
+        "OUTPUT_FILE":  str(DATA_DIR / f"landman_contacts_{ts}.csv"),
+        # Geography
+        "GEO_STATE":    cfg.get("geo_state",  "Ohio"),
+        "GEO_COUNTY":   cfg.get("geo_county", "Belmont"),
+        "GEO_REGION":   cfg.get("geo_region", ""),
+        "GEO_BASIN":    cfg.get("geo_basin",  "Appalachian Basin"),
     }
     if conservative:
         extra["CONSERVATIVE_MODE"] = "1"
@@ -443,6 +502,20 @@ async def run_orchestrator(candidates_file: str = Form(""), dry_run: str = Form(
         cmd += ["--dry-run"]
     jid = start_job("orchestrator", "Phase 3 — Orchestrate", cmd, env)
     return RedirectResponse(f"/run?job={jid}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Source discovery  /discover-sources
+# ---------------------------------------------------------------------------
+
+@app.get("/discover-sources")
+async def discover_sources_endpoint(state: str = "", county: str = ""):
+    """Return county source bundle (tax site, assessor, etc.) from the registry."""
+    import geo_queries as gq
+    cfg = load_config()
+    state  = state.strip()  or cfg.get("geo_state",  "Ohio")
+    county = county.strip() or cfg.get("geo_county", "Belmont")
+    return gq.discover_sources(state, county)
 
 
 # ---------------------------------------------------------------------------

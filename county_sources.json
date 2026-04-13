@@ -1,0 +1,279 @@
+{
+  "_comment": "Per-county source registry for the Landman Pipeline. State and county keys are lowercase. County key should omit ' county' suffix.",
+  "ohio": {
+    "belmont": {
+      "tax_site": "https://countyfusion7.kofiletech.us/",
+      "portal_type": "countyfusion_kofile",
+      "assessor_site": "https://www.belmontcountyauditor.org/",
+      "notes": "Top Utica/Marcellus producer in Ohio. CountyFusion/Kofile portal for deeds and property records."
+    },
+    "monroe": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "https://www.monroecountyohio.net/auditor",
+      "notes": "Major Utica/Marcellus producer. Check county website for deed/recorder access."
+    },
+    "jefferson": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Utica Shale county. Check Jefferson County Auditor for property records."
+    },
+    "carroll": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Utica Shale — Carroll County has significant horizontal drilling activity."
+    },
+    "harrison": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Utica/Marcellus shale county."
+    },
+    "guernsey": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Utica Shale county in southeast Ohio."
+    },
+    "noble": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Active Utica Shale drilling. Noble County has significant mineral activity."
+    },
+    "washington": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Southeast Ohio producing county — Marcellus/Utica."
+    },
+    "morgan": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Smaller producing county, southeast Ohio."
+    },
+    "athens": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Southeast Ohio — some Marcellus activity."
+    },
+    "coshocton": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "East-central Ohio Utica county."
+    },
+    "tuscarawas": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "East Ohio Utica/Marcellus county."
+    },
+    "holmes": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "East-central Ohio. Some Utica activity."
+    }
+  },
+  "west virginia": {
+    "wetzel": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "https://www.wetzelcountywv.com/",
+      "notes": "Top Marcellus/Utica producer in WV. Heavy acquisition activity."
+    },
+    "doddridge": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Core Marcellus county, WV. Significant royalty acquisition target."
+    },
+    "marshall": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Northern WV Marcellus/Utica producer."
+    },
+    "ohio": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "WV Ohio County — Marcellus shale."
+    },
+    "tyler": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "WV Tyler County — Marcellus producer."
+    },
+    "ritchie": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Central WV conventional and Marcellus production."
+    }
+  },
+  "pennsylvania": {
+    "greene": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Southwest PA — Marcellus core county. High acquisition activity."
+    },
+    "washington": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "SW PA Marcellus county. Dense royalty ownership."
+    },
+    "tioga": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "North-central PA Marcellus producer."
+    },
+    "susquehanna": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Northeast PA Marcellus — significant production."
+    },
+    "bradford": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Northeast PA Marcellus county."
+    }
+  },
+  "texas": {
+    "midland": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "https://www.midlandcad.org/",
+      "notes": "Permian Basin — Midland Basin. Extremely active mineral acquisition market."
+    },
+    "ector": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "https://www.ectorcad.org/",
+      "notes": "Permian Basin — Odessa/Ector. Active mineral market."
+    },
+    "reeves": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "https://www.reevescad.org/",
+      "notes": "Delaware Basin / West Texas. Major Permian county."
+    },
+    "karnes": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Eagle Ford Shale — core oil window. High-value mineral county."
+    },
+    "dewitt": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Eagle Ford core oil window county."
+    },
+    "shelby": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "East Texas Haynesville Shale county."
+    },
+    "panola": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "East Texas Haynesville / Cotton Valley county."
+    }
+  },
+  "colorado": {
+    "weld": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "https://www.weldgov.com/departments/assessor",
+      "notes": "DJ Basin / Wattenberg Field — most productive mineral county in CO."
+    },
+    "garfield": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "https://www.garfield-county.com/assessor/",
+      "notes": "Piceance Basin — natural gas. Western Slope Colorado."
+    }
+  },
+  "north dakota": {
+    "mckenzie": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Bakken/Three Forks — top producing ND county. Very active mineral market."
+    },
+    "williams": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Bakken core county. Williston is the hub city."
+    },
+    "mountrail": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Bakken/Three Forks producer — Fort Berthold area."
+    }
+  },
+  "new mexico": {
+    "eddy": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Delaware Basin — core Permian county in NM. Carlsbad hub."
+    },
+    "lea": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Delaware Basin / Permian NM. Hobbs hub. Very active mineral acquisition."
+    }
+  },
+  "louisiana": {
+    "desoto": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Haynesville Shale core county in NW Louisiana."
+    },
+    "red river": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Haynesville Shale county."
+    },
+    "bossier": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Haynesville/Bossier Shale — northwest Louisiana."
+    }
+  },
+  "wyoming": {
+    "campbell": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Powder River Basin — Gillette hub. PRB coal and oil."
+    },
+    "sublette": {
+      "tax_site": "",
+      "portal_type": "generic",
+      "assessor_site": "",
+      "notes": "Pinedale Anticline / Jonah Field — major natural gas."
+    }
+  }
+}

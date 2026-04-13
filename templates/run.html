@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set active_page = "run" %}
-{% block title %}Run — Ohio Landman{% endblock %}
+{% block title %}Run — Landman Pipeline{% endblock %}
 
 {% block content %}
 
@@ -37,6 +37,16 @@
       🟡 Dry Run ON — no API calls
     </span>
   </div>
+</div>
+
+<!-- Geography context banner -->
+<div class="mb-4 bg-sky-50 border border-sky-200 rounded-xl px-5 py-3 flex items-center gap-3 text-sm">
+  <span class="text-sky-500 text-base">📍</span>
+  <span class="text-sky-800">
+    Targeting: <strong>{{ cfg.geo_county }} County, {{ cfg.geo_state }}</strong>
+    {% if cfg.geo_basin %} &mdash; {{ cfg.geo_basin }}{% elif cfg.geo_region %} &mdash; {{ cfg.geo_region }}{% endif %}
+  </span>
+  <a href="/setup" class="ml-auto text-xs text-indigo-600 hover:underline font-medium whitespace-nowrap">Change geography →</a>
 </div>
 
 <!-- Workflow banner -->
@@ -183,7 +193,7 @@
 ═══════════════════════════════════════ -->
 {% call(nothing) phase_card(
     "harvest", "Harvest", "1", "🌐",
-    "Runs 80+ targeted web searches via SerpAPI and 10 SEC EDGAR filings queries across all Ohio mineral/royalty contact categories.",
+    "Runs targeted web searches via SerpAPI and SEC EDGAR queries dynamically generated for " ~ cfg.geo_county ~ " County, " ~ cfg.geo_state ~ ". Covers brokers, funds, owners, attorneys, marketplaces, and more.",
     "raw_hits.jsonl  (every search result)  ·  candidates.csv  (deduplicated, ready for scoring)",
     phase_jobs.harvest, harvest_ok,
     "Set SERPAPI_API_KEY first — see Setup page"
@@ -296,8 +306,8 @@
 ═══════════════════════════════════════ -->
 {% call(nothing) phase_card(
     "score", "Score", "2", "🤖",
-    "Sends candidates.csv to an AI model in batches, classifying each contact by segment (Broker/Fund/Attorney/etc.) and assigning A/B/C tier rankings.",
-    "ohio_landman_contacts_<timestamp>.csv  (tiered, scored, filtered contact list)",
+    "Sends candidates.csv to an AI model in batches, classifying each contact by segment (Broker/Fund/Owner/Attorney/etc.) and assigning A/B/C tier rankings. Geography-aware scoring for " ~ cfg.geo_county ~ " County, " ~ cfg.geo_state ~ ".",
+    "landman_contacts_<timestamp>.csv  (tiered, scored, filtered contact list)",
     phase_jobs.score, score_ok,
     "Set OPENAI_API_KEY and run Harvest first"
 ) %}
